@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/VTxHive/Vibeflow-Music/refs/heads/master/VibeFlow%20Music.png"/>
+  <img src="https://res.cloudinary.com/db2vusdvh/image/upload/v1733220951/VibeFlow_Music_o3mren.png"/>
 </p>
 
 # VibeFlow Music 🎵
@@ -12,6 +12,53 @@ As a developer who codes while listening to music, I found myself increasingly f
 
 This frustration sparked the creation of VibeFlow Music - a solution that seamlessly integrates all essential features into one elegant, user-friendly application.
 
+## 🚀 Installation
+
+### Method 1: Quick Install (Windows)
+1. Download the latest `Vibeflow-setup.exe` from the [releases page](link-to-releases)
+2. Run the installer and follow the on-screen instructions
+3. Launch VibeFlow Music and enjoy! 🎉
+
+### Method 2: From Source
+1. Clone the repository:
+```bash
+git clone https://github.com/VTxHive/Vibeflow-Music.git
+cd Vibeflow-Music
+```
+
+2. Create a virtual environment (recommended):
+```bash
+python -m venv venv
+# On Windows
+venv\Scripts\activate
+# On Unix or MacOS
+source venv/bin/activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Run the application:
+```bash
+python main.py
+```
+
+### Requirements
+- Python 3.8 or higher
+- PySide6
+- Other dependencies are listed in `requirements.txt`:
+  - PySide6
+  - spotipy
+  - yt_dlp
+
+### System Requirements
+- OS: Windows 10/11, macOS 10.14+, or Linux
+- RAM: 4GB minimum (8GB recommended)
+- Storage: 500MB for installation
+
+---
 ## ✨ Features
 
 ### Core Functionality
@@ -31,22 +78,7 @@ This frustration sparked the creation of VibeFlow Music - a solution that seamle
 - ⬇️ **Easy Music Downloads**: Integrated downloading capability
 - 🎨 **Customizable Interface**: Tailor the app to your preferences
 - 🚀 **Regular Updates**: New features added frequently
-
-## 🛠️ Technical Details
-
-- **Framework**: PySide6
-- **Language**: Python
-- **Architecture**: Modern, modular design for easy maintenance and updates
-
-## 🔜 Upcoming Features
-
-We're constantly working to improve VibeFlow Music. Here are some features in our pipeline:
-- Enhanced visualization options
-- Advanced equalizer settings
-- Cross-platform sync capabilities
-- And much more!
-
-
+---
 ## 📁 Project Structure
 
 ```sh
@@ -66,24 +98,41 @@ We're constantly working to improve VibeFlow Music. Here are some features in ou
     │   └── settings_frame.py
     ├── icons
     │   ├── containing all the icons needed
-    ├── README.md
     └── requirements.txt
 ```
+
+---
+## 🛠️ Technical Details
+
+- **Framework**: PySide6
+- **Language**: Python
+- **Architecture**: Modern, modular design for easy maintenance and updates.
+
+## 🔜 Upcoming Features
+
+We're constantly working to improve VibeFlow Music. Here are some features in our pipeline:
+- Enhanced visualization options
+- Advanced equalizer settings
+- Cross-platform sync capabilities
+- And much more!
 
 ## 💡 Philosophy
 
 VibeFlow Music is built on three core principles:
 1. **Simplicity**: Focus on the music, not the interface
 2. **Integration**: All essential features in one place
-3. **User Experience**: Smooth, intuitive, and enjoyable to use 
+3. **User Experience**: Smooth, intuitive, and enjoyable to use
 
 ## 🤝 Contributing
 
 We welcome contributions! Whether it's bug reports, feature suggestions, or code contributions, every input helps make VibeFlow Music better for everyone.
 
-## ⚠️ Disclaimer
-
-VibeFlow Music respects copyright laws and intellectual property rights. Please use the download feature responsibly and only for content you have the right to download.
+### How to Contribute
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ---
 

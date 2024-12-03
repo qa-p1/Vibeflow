@@ -1,3 +1,5 @@
 /.cache
 /data.json
 /.idea
+/.test.py
+*.pyc 
