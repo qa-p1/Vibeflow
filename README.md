@@ -15,7 +15,7 @@ This frustration sparked the creation of VibeFlow Music - a solution that seamle
 ## 🚀 Installation
 
 ### Method 1: Quick Install (Windows)
-1. Download the latest `Vibeflow-setup.exe` from the [releases page](link-to-releases)
+1. Download the latest `Vibeflow-setup.exe` from the [releases page](https://github.com/qa-p1/Vibeflow/releases/tag/first)
 2. Run the installer and follow the on-screen instructions
 3. Launch VibeFlow Music and enjoy! 🎉
 
