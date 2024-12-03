@@ -136,4 +136,4 @@ We welcome contributions! Whether it's bug reports, feature suggestions, or code
 
 ---
 
-<p align="center">Made with ❤️ for music lovers by music lovers by VTxHive</p>
+<p align="center">Made with ❤️ for music lovers by music lovers by qa-p1</p>
