@@ -89,7 +89,6 @@ python main.py
     │   ├── frame_functions
     │   │   ├── utils.py
     │   │   ├── playlists-functions.py
-    │   ├── bottom_player.py 
     │   ├── lyrics_view.py
     │   ├── mini_player.py
     │   ├── music_player_frame.py

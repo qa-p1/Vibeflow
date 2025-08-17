@@ -17,7 +17,7 @@ class MiniPlayer(QWidget):
     def setup_ui(self):
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(250, 250)
+        self.setFixedSize(400, 400)
         self.mouseDoubleClickEvent = lambda event: self.minimize_window()
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -63,13 +63,13 @@ class MiniPlayer(QWidget):
         self.fade_animation.setEasingCurve(QEasingCurve.InOutQuad)
 
     def play_pause(self):
-        self.main_window.bottom_player.play_pause()
+        self.main_window.now_playing_view.play_pause()
 
     def prev_song(self):
-        self.main_window.bottom_player.prev_song()
+        self.main_window.now_playing_view.prev_song()
 
     def next_song(self):
-        self.main_window.bottom_player.next_song()
+        self.main_window.now_playing_view.next_song()
 
     def minimize_window(self):
         self.showMinimized()

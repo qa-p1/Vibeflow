@@ -7,49 +7,88 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QHBoxLa
     QListWidget, QAbstractItemView, QPushButton, QFileDialog, QListWidgetItem, QMessageBox, QGraphicsBlurEffect
 from colorthief import ColorThief
 from frames.frame_functions.utils import apply_hover_effect
-
+from .frame_functions.utils import create_button
 
 class PlayerFrame(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.main_frame = parent
-        self.all_songs = self.main_frame.all_songs
-        self.playlists = self.main_frame.playlists
+        self.all_songs = self.main_frame.all_songs  # Initial copy
+        self.playlists = self.main_frame.playlists  # Initial copy
         self.curr_playlist_name = ''
         self.setup_ui()
-        self.setup_layout('All songs')
+        # self.setup_layout('All songs') # Initial layout is now set by HomeScreen selection
 
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(15, 15, 15, 15)  # Add some padding
+
+        # --- Back Button and Header ---
+        top_bar_layout = QHBoxLayout()
+        self.back_button = create_button("icons/back-arrow.png", self.go_back, 24)  # Ensure you have a back-arrow.png
+        self.back_button.setToolTip("Back to Home")
+        top_bar_layout.addWidget(self.back_button, alignment=Qt.AlignLeft)
+        # top_bar_layout.addStretch(1) # Removed stretch to keep header content to the left of songs
+
         self.header_widget = QWidget()
         self.header_layout = QHBoxLayout(self.header_widget)
-        self.header_widget.setFixedHeight(180)
-        edit_icon = QPixmap("icons/edit.png").scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.header_widget.setCursor(edit_icon)
-        self.header_widget.mousePressEvent = lambda event: self.edit_playlist(self.curr_playlist_name)
+        # self.header_widget.setFixedHeight(180) # Height will be dynamic
+        self.header_layout.setContentsMargins(10, 0, 0, 0)  # Reduced left margin
 
-        self.header_layout.setContentsMargins(20, 0, 0, 0)
         self.header_cover = QLabel()
         self.header_cover.setFixedSize(150, 150)
         self.header_cover.setStyleSheet("background: transparent;")
         self.header_layout.addWidget(self.header_cover)
 
+        playlist_info_layout = QVBoxLayout()  # For title and edit icon
         self.playlist_title = QLabel()
-        self.playlist_title.setStyleSheet("background: transparent; font-size: 35px; margin-left: 5px")
-        self.header_layout.addWidget(self.playlist_title)
-        self.header_layout.addStretch()
+        self.playlist_title.setStyleSheet(
+            "background: transparent; font-size: 28px; font-weight:bold; margin-left: 10px")
 
-        self.layout.addWidget(self.header_widget)
+        self.edit_playlist_button = create_button("icons/edit.png",
+                                                  lambda: self.edit_playlist(self.curr_playlist_name), 22)
+        self.edit_playlist_button.setToolTip("Edit this playlist")
+
+        title_and_edit_layout = QHBoxLayout()
+        title_and_edit_layout.addWidget(self.playlist_title)
+        title_and_edit_layout.addWidget(self.edit_playlist_button, alignment=Qt.AlignTop)
+        title_and_edit_layout.addStretch()
+
+        playlist_info_layout.addLayout(title_and_edit_layout)
+        # Add more playlist info if needed, e.g., song count, duration
+        playlist_info_layout.addStretch()
+
+        self.header_layout.addLayout(playlist_info_layout)
+        self.header_layout.addStretch()  # Stretch after playlist info
+
+        top_bar_layout.addWidget(self.header_widget)  # Add header_widget to top_bar_layout
+        self.layout.addLayout(top_bar_layout)  # Add top bar (back button + header)
 
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("background: transparent; border: none;")  # Style scroll area
         self.layout.addWidget(self.scroll_area)
+
         self.song_list_widget = QWidget()
         self.song_list_layout = QVBoxLayout(self.song_list_widget)
+        self.song_list_layout.setAlignment(Qt.AlignTop)  # Align songs to top
         self.scroll_area.setWidget(self.song_list_widget)
 
+    def go_back(self):
+        self.main_frame.show_frame(self.main_frame.home_screen_frame)
+
     def setup_layout(self, playlist_name):
+        # Refresh data sources from main_frame each time layout is set
+        self.all_songs = self.main_frame.all_songs
+        self.playlists = self.main_frame.playlists
+
+        if playlist_name not in self.playlists:
+            QMessageBox.warning(self, "Error", f"Playlist '{playlist_name}' not found.")
+            self.go_back()  # Go back if playlist doesn't exist
+            return
+
+        # Asynchronously run the setup
         QTimer.singleShot(0, lambda: self.run_async_setup(playlist_name))
 
     def run_async_setup(self, playlist_name):
@@ -57,8 +96,21 @@ class PlayerFrame(QWidget):
 
     async def setup_layout_async(self, playlist_name):
         self.curr_playlist_name = playlist_name
-        curr_playlist = self.playlists[playlist_name]
 
+        # Defensive check
+        if playlist_name not in self.playlists:
+            print(f"Error: Playlist '{playlist_name}' disappeared before async setup.")
+            # Optionally show a message or go back
+            self.clear_song_list_layout()  # Clear previous content
+            no_playlist_label = QLabel(f"Playlist '{playlist_name}' could not be loaded.")
+            self.song_list_layout.addWidget(no_playlist_label)
+            self.playlist_title.setText("Error")
+            self.header_cover.setPixmap(
+                QPixmap("icons/music.png").scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.apply_gradient_to_widget(QColor(50, 50, 50))  # Default gradient
+            return
+
+        curr_playlist = self.playlists[playlist_name]
         self.clear_song_list_layout()
 
         if not curr_playlist['songs']:
@@ -139,9 +191,20 @@ class PlayerFrame(QWidget):
             drag.setMimeData(mime_data)
             drag.exec_(Qt.CopyAction)
 
-    def play_song(self, index, play_name):
-        self.main_frame.current_song_index = self.playlists[play_name]['songs'].index(index)
-        self.main_frame.set_media(self.all_songs[index]["mp3_location"])
+    def play_song(self, song_index_in_all_songs, playlist_name_context):
+        self.main_frame.current_playlist = self.playlists[playlist_name_context]['songs']
+        try:
+            self.main_frame.current_song_index = self.main_frame.current_playlist.index(song_index_in_all_songs)
+        except ValueError:
+            print(f"Error: Song index {song_index_in_all_songs} not found in playlist {playlist_name_context}")
+            self.main_frame.current_playlist = [song_index_in_all_songs]
+            self.main_frame.current_song_index = 0
+
+        self.main_frame.set_media(self.all_songs[song_index_in_all_songs]["mp3_location"])
+
+        # Update queue in expanded player
+        curr_playlist_songs = [self.main_frame.all_songs[i] for i in self.main_frame.current_playlist]
+        self.main_frame.music_player_frame.queue_view.update_queue(curr_playlist_songs)
 
     def set_rounded_pixmap(self, label, pixmap, radius):
         rounded_pixmap = QPixmap(label.size())
@@ -178,299 +241,6 @@ class PlayerFrame(QWidget):
         """
         self.header_widget.setStyleSheet(style_sheet)
 
-    def edit_playlist(self, playlist_name):
-        dialog = EditPlaylistDialog(self, playlist_name)
-        if dialog.exec() == QDialog.Accepted:
-            self.main_frame.load_data()
-            self.all_songs = self.main_frame.all_songs
-            self.playlists = self.main_frame.playlists
-            self.main_frame.display_playlists_sync()
-            self.setup_layout('All songs')
 
 
-class EditPlaylistDialog(QDialog):
-    def __init__(self, parent, playlist_name):
-        super().__init__(parent)
-        self.main_frame = parent.main_frame
-        self.playlist_name = playlist_name
-        self.original_name = playlist_name
-        self.playlist_info = self.main_frame.playlists[playlist_name]
-        self.all_songs = self.main_frame.all_songs
-        self.setup_ui()
-        self.setWindowIcon(QIcon("icons/vibeflow.ico"))
-        self.apply_styles()
 
-    def setup_ui(self):
-        self.setWindowTitle(f"Edit Playlist: {self.playlist_name}")
-        self.setMinimumSize(500, 600)
-        main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(30, 30, 30, 30)
-
-        top_section = QHBoxLayout()
-
-        self.cover_label = QLabel()
-        self.cover_label.setFixedSize(200, 200)
-        self.cover_label.setStyleSheet("border-radius: 10px; border: 2px solid #555;")
-        self.cover_label.setCursor(
-            QPixmap("icons/edit.png").scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.update_cover_image()
-        top_section.addWidget(self.cover_label)
-
-        name_section = QVBoxLayout()
-        name_section.setSpacing(10)
-
-        name_label = QLabel("Playlist Name")
-        name_label.setFont(QFont("Quicksand", 12, QFont.Bold))
-        name_section.addWidget(name_label)
-
-        self.name_edit = QLineEdit(self.playlist_name)
-        self.name_edit.setFont(QFont("Quicksand", 14))
-        self.name_edit.textChanged.connect(lambda: self.on_name_changed(self.name_edit.text()))
-        name_section.addWidget(self.name_edit)
-
-        change_cover_btn = QPushButton("Change Cover")
-        change_cover_btn.setIcon(QIcon("icons/icons8-edit-image-96.png"))
-        change_cover_btn.clicked.connect(self.change_cover_image)
-        name_section.addWidget(change_cover_btn)
-
-        name_section.addStretch()
-        top_section.addLayout(name_section)
-
-        main_layout.addLayout(top_section)
-
-        songs_label = QLabel("Songs")
-        songs_label.setFont(QFont("Quicksand", 12, QFont.Bold))
-        main_layout.addWidget(songs_label)
-
-        self.songs_list = QListWidget()
-        self.songs_list.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.songs_list.setStyleSheet("QListWidget::item { padding: 5px; }")
-        self.update_songs_list()
-
-        songs_scroll = QScrollArea()
-        songs_scroll.setWidget(self.songs_list)
-        songs_scroll.setWidgetResizable(True)
-        songs_scroll.setFixedHeight(200)
-        main_layout.addWidget(songs_scroll)
-
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-
-        remove_button = QPushButton("Remove Selected")
-        remove_button.setIcon(QIcon("icons/icons8-trash-96.png"))
-        remove_button.clicked.connect(self.remove_selected_songs)
-        button_layout.addWidget(remove_button)
-
-        save_button = QPushButton("Save Changes")
-        save_button.setIcon(QIcon("icons/icons8-save-96.png"))
-        save_button.clicked.connect(self.save_changes)
-        button_layout.addWidget(save_button)
-
-        cancel_button = QPushButton("Cancel")
-        cancel_button.setIcon(QIcon("icons/icons8-cancel-96.png"))
-        cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_button)
-
-        main_layout.addLayout(button_layout)
-
-        if self.playlist_name != "All songs":
-            delete_button = QPushButton("Delete Playlist")
-            delete_button.setIcon(QIcon("icons/icons8-delete-96.png"))
-            delete_button.clicked.connect(self.delete_playlist)
-            button_layout.addWidget(delete_button)
-
-        main_layout.addLayout(button_layout)
-
-    def apply_styles(self):
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #2b2b2b;
-                color: #ffffff;
-            }
-            QLabel {
-                color: #ffffff;
-            }
-            QLineEdit {
-                background-color: #3b3b3b;
-                color: #ffffff;
-                border: 1px solid #555;
-                border-radius: 5px;
-                padding: 5px;
-            }
-            QPushButton {
-                background-color: #3b3b3b;
-                color: #ffffff;
-                border: 1px solid #555;
-                border-radius: 5px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #4b4b4b;
-            }
-            QListWidget {
-                background-color: #3b3b3b;
-                color: #ffffff;
-                border: 1px solid #555;
-                border-radius: 5px;
-            }
-            QScrollArea {
-                border: none;
-            }
-        """)
-
-    def update_cover_image(self):
-        if self.playlist_info['playlist_cover'] == "auto":
-            if self.playlist_info['songs']:
-                first_song = self.all_songs[self.playlist_info['songs'][0]]
-                pixmap = QPixmap(first_song['cover_location'])
-            else:
-                pixmap = QPixmap("icons/music.png")
-        else:
-            pixmap = QPixmap(self.playlist_info['playlist_cover'])
-
-        self.cover_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
-    def on_name_changed(self, new_name):
-        if self.original_name == 'All songs':
-            QMessageBox.warning(self, "Warning", "You can't change the name of this default playlist")
-            self.name_edit.setText('All songs')
-            return
-
-        if new_name in self.main_frame.playlists and new_name != self.original_name:
-            QMessageBox.warning(self, "Warning", "A playlist with this name already exists")
-            self.name_edit.setText(self.playlist_name)
-            return
-
-        if new_name != self.original_name and new_name != "All songs":
-            self.playlist_name = new_name
-
-    def save_changes(self):
-        new_name = self.name_edit.text()
-
-        if new_name != self.original_name and new_name != "All songs":
-            if new_name in self.main_frame.playlists:
-                QMessageBox.warning(self, "Warning", "A playlist with this name already exists")
-                return
-
-            self.main_frame.playlists[new_name] = self.main_frame.playlists.pop(self.original_name)
-            self.playlist_name = new_name
-
-        self.main_frame.playlists[self.playlist_name] = self.playlist_info
-        self.main_frame.player_frame.playlists[self.playlist_name] = self.playlist_info
-        self.update_json()
-        self.accept()
-
-    def change_cover_image(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Select Cover Image", "", "Image Files (*.png *.jpg)")
-        if file_name:
-            self.playlist_info['playlist_cover'] = file_name
-            self.update_cover_image()
-            self.update_json()
-
-    def update_songs_list(self):
-        self.songs_list.clear()
-        for song_index in self.playlist_info['songs']:
-            song = self.all_songs[song_index]
-            item = QListWidgetItem()
-            item.setText(f"{song['song_name']} - {song['artist']}")
-            item.setIcon(QIcon(song['cover_location']))
-            self.songs_list.addItem(item)
-
-    def remove_selected_songs(self):
-        selected_items = self.songs_list.selectedItems()
-        if not selected_items:
-            return
-
-        if self.playlist_name == "All songs":
-            confirm_msg = f"You are about to delete {len(selected_items)} song(s) from 'All songs'.\n\n" \
-                          f"This will remove the selected song(s) from all playlists and delete the files from your system.\n\n" \
-                          f"Are you sure you want to continue?"
-            reply = QMessageBox.question(self, 'Confirm Deletion', confirm_msg,
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-            if reply == QMessageBox.No:
-                return
-
-            deleted_indices = []
-            for item in reversed(selected_items):
-                index = self.songs_list.row(item)
-                song_index = self.playlist_info['songs'][index]
-
-                song_info = self.all_songs[song_index]
-                try:
-                    os.remove(song_info['mp3_location'])
-                    os.remove(song_info['cover_location'])
-                    os.remove(song_info['lyrics_location'])
-                except OSError as e:
-                    QMessageBox.warning(self, "File Deletion Error",
-                                        f"Error deleting files for '{song_info['song_name']}':\n{e}")
-
-                deleted_indices.append(song_index)
-
-            for index in sorted(deleted_indices, reverse=True):
-                del self.all_songs[index]
-            for playlist_name, playlist in self.main_frame.playlists.items():
-                playlist['songs'] = [s for s in playlist['songs'] if s not in deleted_indices]
-                playlist['songs'] = [s - sum(1 for d in deleted_indices if d < s) for s in playlist['songs']]
-
-            self.update_songs_list()
-            self.update_json()
-            QMessageBox.information(self, "Deletion Complete",
-                                    f"{len(selected_items)} song(s) have been deleted from your system and all playlists.")
-        else:
-            for item in reversed(selected_items):
-                index = self.songs_list.row(item)
-                song_index = self.playlist_info['songs'][index]
-                self.playlist_info['songs'].remove(song_index)
-
-            self.update_songs_list()
-
-    def delete_playlist(self):
-        if self.playlist_name == "All songs":
-            return
-
-        confirm_msg = f"Are you sure you want to delete the playlist '{self.playlist_name}'?"
-        reply = QMessageBox.question(self, 'Confirm Deletion', confirm_msg,
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-        if reply == QMessageBox.Yes:
-            if self.playlist_name in self.main_frame.playlists:
-                del self.main_frame.playlists[self.playlist_name]
-
-            if hasattr(self.main_frame, 'player_frame') and hasattr(self.main_frame.player_frame, 'playlists'):
-                if self.playlist_name in self.main_frame.player_frame.playlists:
-                    del self.main_frame.player_frame.playlists[self.playlist_name]
-
-            if hasattr(self.main_frame, 'player_frame'):
-                self.main_frame.player_frame.playlists = self.main_frame.playlists
-
-            self.update_json()
-            self.accept()
-
-    def update_json(self):
-        data_json_path = os.path.join(os.getcwd(), self.main_frame.get_data_file_path())
-        with open(data_json_path, 'r') as f:
-            data = json.load(f)
-
-        data['All Songs'] = self.all_songs
-
-        updated_playlists = {}
-        for playlist_name in list(data['Playlists'].keys()):
-            if playlist_name in self.main_frame.playlists:
-                updated_playlists[playlist_name] = self.main_frame.playlists[playlist_name]
-            elif playlist_name == self.original_name and self.playlist_name != self.original_name:
-                updated_playlists[self.playlist_name] = self.main_frame.playlists[self.playlist_name]
-
-        data['Playlists'] = updated_playlists
-
-        with open(data_json_path, 'w') as f:
-            json.dump(data, f, indent=4)
-
-    def update_songs_list(self):
-        self.songs_list.clear()
-        for song_index in self.playlist_info['songs']:
-            song = self.all_songs[song_index]
-            item = QListWidgetItem(f"{song['song_name']} - {song['artist']}")
-            item.setIcon(QIcon(song['cover_location']))
-            self.songs_list.addItem(item)
