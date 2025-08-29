@@ -1,16 +1,14 @@
 import json
 import os
-import requests
 import spotipy
-from PySide6.QtCore import Qt, QRunnable, Signal, QObject, QByteArray, QThreadPool
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPixmapCache, QFont
+from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtGui import QPixmap, QIcon, QPixmapCache, QFont, QColor
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QPushButton, QFileDialog, QWidget, QScrollArea, QMessageBox,
-                               QAbstractItemView)
-from PySide6.QtWidgets import QListWidgetItem
+                               QAbstractItemView, QCheckBox, QProgressBar, QListWidgetItem)
 from spotipy.oauth2 import SpotifyClientCredentials
 from frames.search_frame import ImageDownloader
-from .utils import create_button, apply_hover_effect, name_label
+from .utils import create_button, apply_hover_effect
 
 
 class CreatePlaylistDialog(QDialog):
@@ -208,21 +206,195 @@ def update_playlists_to_json(file_path, playlists):
         f.truncate()
         json.dump(data, f, indent=4)
 
+class DownloadProgressDialog(QDialog):
+    def __init__(self, playlist_name, total_songs, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Importing Playlist")
+        self.setMinimumSize(400, 500)
+        self.playlist_name = playlist_name
+        self.total_songs = total_songs
+        self.completed_songs = 0
+        self.song_items = {}
+
+        self.setup_ui()
+        self.apply_styles()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        self.title_label = QLabel(f"Importing '{self.playlist_name}'")
+        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        layout.addWidget(self.title_label)
+
+        self.status_label = QLabel("Preparing...")
+        self.status_label.setStyleSheet("font-size: 12px; color: #aaa;")
+        layout.addWidget(self.status_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(self.total_songs)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        self.song_list_widget = QListWidget()
+        layout.addWidget(self.song_list_widget)
+
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.accept)
+        self.close_button.setEnabled(False)  # Disabled until finished
+        layout.addWidget(self.close_button)
+
+    def apply_styles(self):
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(35, 35, 40, 240), stop:1 rgba(25, 25, 30, 240));
+                border-radius: 16px; color: #e0e0e0; font-family: Quicksand;
+            }
+            QProgressBar {
+                border: none; border-radius: 5px; background: rgba(255, 255, 255, 10); height: 10px;
+            }
+            QProgressBar::chunk {
+                background-color: #50b4ff; border-radius: 5px;
+            }
+            QListWidget {
+                background: rgba(255, 255, 255, 8); border: 1px solid rgba(255, 255, 255, 25);
+                border-radius: 12px; outline: none;
+            }
+            QListWidget::item { padding: 8px 12px; }
+            QPushButton {
+                background: rgba(255, 255, 255, 12); color: #e0e0e0; border-radius: 8px;
+                padding: 10px 16px; font-size: 14px; font-weight: 500;
+            }
+            QPushButton:hover { background: rgba(255, 255, 255, 20); }
+            QPushButton:disabled { background: rgba(255, 255, 255, 5); color: #888; }
+        """)
+
+    def populate_song_list(self, songs):
+        for song in songs:
+            song_name = song.get('name', 'Unknown Track')
+            artist_name = ", ".join([a.get('name', 'Unknown Artist') for a in song.get('artists', [])])
+            item = QListWidgetItem(f" {song_name} - {artist_name}")
+            item.setForeground(QColor("#888"))
+            self.song_list_widget.addItem(item)
+            self.song_items[song['id']] = item
+
+    def update_song_status(self, song_id, status, color):
+        if song_id in self.song_items:
+            item = self.song_items[song_id]
+
+            if status == "Downloaded" or status == "In Library":
+                self.completed_songs += 1
+                self.progress_bar.setValue(self.completed_songs)
+                self.status_label.setText(f"Processed {self.completed_songs} of {self.total_songs} songs...")
+                item.setIcon(QIcon("icons/download-complete.png"))
+                if status == "In Library":
+                    item.setToolTip("Already in your library")
+            elif status == "Failed":
+                self.completed_songs += 1 # A failed attempt is still a "processed" song
+                self.progress_bar.setValue(self.completed_songs)
+                self.status_label.setText(f"Processed {self.completed_songs} of {self.total_songs} songs...")
+                item.setIcon(QIcon("icons/download-failed.png"))
+            elif status == "Downloading...":
+                item.setIcon(QIcon("icons/downloading.png"))
+
+            item.setForeground(QColor(color))
+
+    def import_complete(self, new_playlist_name):
+        self.title_label.setText("Import Complete!")
+        self.status_label.setText(f"Playlist '{new_playlist_name}' has been created.")
+        self.close_button.setEnabled(True)
+        self.close_button.setText("Done")
 
 class ImportPlaylistsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Import Your Playlists Here")
-        self.setFixedSize(430, 560)
+        self.setWindowTitle("Import Spotify Playlist")
+        self.setMinimumSize(480, 700)
+        self.track_widgets = []
+        self.setup_spotify()
         self.setup_ui()
-        self.sp = spotipy.Spotify(
-            auth_manager=SpotifyClientCredentials(
-                client_id="baf2d72ae6054acf91dca4f10f8e3f2e",
-                client_secret="aa9bbc0e087445a0a8799e676cd3ca5d",
-            )
-        )
-        self.threadpool = QThreadPool()
         self.apply_styles()
+        self.threadpool = QThreadPool()
+
+    def setup_spotify(self):
+        try:
+            self.sp = spotipy.Spotify(
+                auth_manager=SpotifyClientCredentials(
+                    client_id="baf2d72ae6054acf91dca4f10f8e3f2e",
+                    client_secret="aa9bbc0e087445a0a8799e676cd3ca5d",
+                )
+            )
+            self.sp.search('test', limit=1, type='track')
+        except Exception as e:
+            QMessageBox.critical(self, "Spotify Error",
+                                 f"Could not connect to Spotify. Please check your internet connection.\nError: {e}")
+            self.sp = None
+
+    def setup_ui(self):
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout.setSpacing(20)
+
+        # --- Search Bar ---
+        search_box_layout = QHBoxLayout()
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Paste Spotify Playlist URL here...")
+        self.search_box.returnPressed.connect(self.search_playlist)
+        search_box_layout.addWidget(self.search_box)
+        self.go_button = create_button('icons/search.png', self.search_playlist, 35)
+        search_box_layout.addWidget(self.go_button)
+        self.main_layout.addLayout(search_box_layout)
+
+        self.playlist_info_widget = QWidget()
+        self.playlist_info_widget.setStyleSheet("background: transparent;")
+        playlist_info_layout = QVBoxLayout(self.playlist_info_widget)
+        playlist_info_layout.setSpacing(10)
+        playlist_info_layout.setAlignment(Qt.AlignCenter)
+
+        self.playlist_cover_label = QLabel()
+        self.playlist_cover_label.setFixedSize(150, 150)
+        self.playlist_cover_label.setStyleSheet("border-radius: 8px;")
+        playlist_info_layout.addWidget(self.playlist_cover_label)
+
+        self.playlist_name_label = QLabel("Playlist Name")
+        self.playlist_name_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.playlist_name_label.setAlignment(Qt.AlignCenter)
+        self.playlist_name_label.setWordWrap(True)
+        playlist_info_layout.addWidget(self.playlist_name_label)
+
+        self.playlist_details_label = QLabel("by Owner • 0 songs")
+        self.playlist_details_label.setStyleSheet("color: #aaa; font-size: 13px;")
+        self.playlist_details_label.setAlignment(Qt.AlignCenter)
+        playlist_info_layout.addWidget(self.playlist_details_label)
+
+        self.playlist_info_widget.setVisible(False)
+        self.main_layout.addWidget(self.playlist_info_widget)
+
+        # --- Track List ---
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self.results_container = QWidget()
+        self.results_layout = QVBoxLayout(self.results_container)
+        self.results_layout.setAlignment(Qt.AlignTop)
+        self.results_layout.setSpacing(8)
+        self.scroll_area.setWidget(self.results_container)
+        self.main_layout.addWidget(self.scroll_area)
+
+        # --- Action Buttons ---
+        buttons_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("Deselect All")
+        self.select_all_button.clicked.connect(self.toggle_select_all)
+        buttons_layout.addWidget(self.select_all_button)
+        buttons_layout.addStretch()
+        self.import_button = QPushButton("Import Selected")
+        self.import_button.clicked.connect(self.import_selected_tracks)
+        buttons_layout.addWidget(self.import_button)
+        self.main_layout.addLayout(buttons_layout)
 
     def apply_styles(self):
         self.setStyleSheet("""
@@ -233,19 +405,20 @@ class ImportPlaylistsDialog(QDialog):
                 border: 1px solid rgba(255, 255, 255, 60);
                 border-radius: 16px;
                 color: #e0e0e0;
+                font-family: Quicksand;
             }
+            QLabel { color: #e0e0e0; background: transparent; }
             QLineEdit {
                 background: rgba(255, 255, 255, 15);
                 color: #e0e0e0;
                 border: 1px solid rgba(255, 255, 255, 40);
                 border-radius: 8px;
-                padding: 8px 12px;
-                font-family: Quicksand;
-                font-weight: 700;
-                font-size: 16px;
+                padding: 10px 14px;
+                font-weight: 500;
+                font-size: 14px;
             }
             QLineEdit:focus {
-                border: 1px solid rgba(255, 255, 255, 80);
+                border: 1px solid rgba(80, 180, 255, 150);
                 background: rgba(255, 255, 255, 20);
             }
             QPushButton {
@@ -255,143 +428,197 @@ class ImportPlaylistsDialog(QDialog):
                 border-radius: 8px;
                 padding: 10px 16px;
                 font-size: 14px;
-                font-family: Quicksand;
                 font-weight: 500;
             }
             QPushButton:hover {
                 background: rgba(255, 255, 255, 20);
                 border: 1px solid rgba(255, 255, 255, 50);
             }
+            QPushButton:pressed { background: rgba(255, 255, 255, 25); }
             QScrollArea {
                 background: rgba(255, 255, 255, 8);
                 border: 1px solid rgba(255, 255, 255, 25);
                 border-radius: 12px;
             }
-            QScrollArea > QWidget > QWidget {
-                background: transparent;
-            }
+            QScrollArea > QWidget > QWidget { background: transparent; }
             QScrollBar:vertical {
                 background: rgba(255, 255, 255, 10);
-                width: 8px;
-                border-radius: 4px;
-                margin: 0;
+                width: 8px; border-radius: 4px; margin: 0;
             }
             QScrollBar::handle:vertical {
                 background: rgba(255, 255, 255, 30);
-                min-height: 20px;
-                border-radius: 4px;
+                min-height: 20px; border-radius: 4px;
             }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 50);
+            QScrollBar::handle:vertical:hover { background: rgba(255, 255, 255, 50); }
+            QCheckBox { spacing: 12px; }
+            QCheckBox::indicator {
+                width: 20px; height: 20px;
+                border: 2px solid #555; border-radius: 6px;
+            }
+            QCheckBox::indicator:hover { border: 2px solid #777; }
+            QCheckBox::indicator:checked {
+                background-color: #50b4ff; border: 2px solid #50b4ff;
             }
         """)
-
-    def setup_ui(self):
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-
-        search_box_layout = QHBoxLayout()
-        self.search_box = QLineEdit()
-        self.search_box.returnPressed.connect(self.search_playlist)
-        self.search_box.setStyleSheet("""
-            font-size: 16px;
-            font-family: Quicksand;
-            font-weight: 700;
-        """)
-        self.search_box.setFixedHeight(40)
-        search_box_layout.addWidget(self.search_box)
-
-        self.go_button = create_button('icons/search.png', self.search_playlist, 35)
-        search_box_layout.addWidget(self.go_button)
-
-        self.layout.addLayout(search_box_layout)
-
-        self.results = QWidget()
-        self.results_layout = QVBoxLayout(self.results)
-        self.results_layout.setAlignment(Qt.AlignTop)
-
-        self.scroll_area = QScrollArea(self)
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        self.layout.addWidget(self.scroll_area)
-        self.scroll_area.setWidget(self.results)
-
-        self.download_all = QPushButton("Import Playlist")
-        self.layout.addWidget(self.download_all)
 
     def search_playlist(self):
-        for i in reversed(range(self.results_layout.count())):
-            item = self.results_layout.itemAt(i)
-            widget = item.widget()
+        if not self.sp:
+            return
+
+        for widget in self.track_widgets:
             widget.deleteLater()
+        self.track_widgets.clear()
+        self.playlist_info_widget.setVisible(False)
 
-        playlist_link = self.search_box.text()
-        if playlist_link.startswith('https://open.spotify.com/playlist/'):
-            playlist_id = playlist_link.split('/')[-1]
-            pl_id = f'spotify:playlist:{playlist_id}'
+        playlist_link = self.search_box.text().strip()
+        if not playlist_link.startswith('https://open.spotify.com/playlist/'):
+            QMessageBox.warning(self, "Invalid URL", "Please enter a valid Spotify playlist URL.")
+            return
 
-            response = self.sp.playlist_items(pl_id, fields='items.track.name,items.track.album.images.url,items.track.artists')
-            if len(response['items']) == 0:
-                QMessageBox.warning(self, "Warning", "No tracks found")
-            else:
-                for i, item in enumerate(response['items']):
-                    self.results_layout.addWidget(self.create_song_widget(item['track']))
+        try:
+            playlist_id = playlist_link.split('/')[-1].split('?')[0]
+            playlist_data = self.sp.playlist(playlist_id)
+            self.update_playlist_info_widget(playlist_data)
+
+            tracks = []
+            response = self.sp.playlist_items(playlist_id, fields='items.track(name,artists,album(images,name)),next')
+            tracks.extend(response['items'])
+            while response['next']:
+                response = self.sp.next(response)
+                tracks.extend(response['items'])
+
+            if not tracks:
+                QMessageBox.information(self, "Empty Playlist", "This playlist contains no tracks.")
+                return
+
+            for item in tracks:
+                if item and item['track']:
+                    widget = self.create_song_widget(item['track'])
+                    self.results_layout.addWidget(widget)
+                    self.track_widgets.append(widget)
+        except spotipy.exceptions.SpotifyException as e:
+            QMessageBox.critical(self, "API Error", f"Could not fetch playlist data from Spotify.\nReason: {e.msg}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+
+    def update_playlist_info_widget(self, data):
+        self.playlist_name_label.setText(data['name'])
+        details = f"by {data['owner']['display_name']} • {data['tracks']['total']} songs"
+        self.playlist_details_label.setText(details)
+
+        if data['images']:
+            cover_url = data['images'][0]['url']
+            placeholder = QPixmap(150, 150)
+            placeholder.fill(Qt.gray)
+            self.playlist_cover_label.setPixmap(placeholder)
+
+            downloader = ImageDownloader(cover_url, {"id": "playlist_cover"})
+            downloader.signals.finished.connect(self.update_playlist_cover)
+            self.threadpool.start(downloader)
         else:
-            print("nigga")
+            pixmap = QPixmap("icons/music.png")
+            scaled_pixmap = pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.playlist_cover_label.setPixmap(scaled_pixmap)
+
+        self.playlist_info_widget.setVisible(True)
+
+    def update_playlist_cover(self, url, pixmap):
+        scaled_pixmap = pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.playlist_cover_label.setPixmap(scaled_pixmap)
 
     def create_song_widget(self, song):
         song_widget = QWidget()
         song_layout = QHBoxLayout(song_widget)
-        song_layout.setContentsMargins(20, 0, 0, 0)
-        song_widget.setFixedWidth(380)
+        song_layout.setContentsMargins(15, 10, 15, 10)
+        song_layout.setSpacing(15)
+
+        checkbox = QCheckBox()
+        checkbox.setFixedWidth(30)
+        checkbox.setChecked(True)
+        song_layout.addWidget(checkbox)
 
         cover_label = QLabel()
-        cover_pix = self.load_pixmap_from_url(song["album"]["images"][0]["url"], song)
-        cover_label.setFixedSize(40, 40)
-        cover_label.setPixmap(cover_pix.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        cover_label.setProperty("url", song["album"]["images"][0]["url"])
+        cover_label.setFixedSize(45, 45)
+        cover_label.setStyleSheet("border-radius: 4px;")
+        if song["album"]["images"]:
+            url = song["album"]["images"][-1]["url"]
+            cover_pix = self.load_pixmap_from_url(url, song)
+            cover_label.setPixmap(cover_pix)
+            cover_label.setProperty("url", url)
+        else:
+            placeholder = QPixmap("icons/music.png").scaled(45, 45, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            cover_label.setPixmap(placeholder)
         song_layout.addWidget(cover_label)
 
-        title_label = name_label(song['name'])
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        title_label = QLabel(song['name'])
         title_label.setToolTip(song['name'])
-        title_label.setStyleSheet('font-size: 20px;')
-        song_layout.addWidget(title_label)
-        song_layout.addStretch()
-        download_button = create_button('icons/download.png', lambda checked, track_obj=song: self.parent().home_screen_frame.search_view_widget.initiate_download(track_obj, -1), 26)  # Adjusted size
-        song_layout.addWidget(download_button)
+        title_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        artist_name = ", ".join([a['name'] for a in song['artists']])
+        artist_label = QLabel(artist_name)
+        artist_label.setToolTip(artist_name)
+        artist_label.setStyleSheet("font-size: 12px; color: #bbb;")
+        text_layout.addWidget(title_label)
+        text_layout.addWidget(artist_label)
+        song_layout.addLayout(text_layout)
 
-        song_widget.setFixedHeight(70)
-        song_widget.setCursor(Qt.PointingHandCursor)
-        apply_hover_effect(song_widget, "background: #292929; border-radius: 8px;", "background: transparent;")
+        if not song.get('id'):
+            song_name_safe = song.get('name', 'Unknown Track')
+            artist_name_safe = song.get('artists', [{'name': 'Unknown Artist'}])[0].get('name', 'Unknown Artist')
+            song['id'] = f"fallback_{song_name_safe}_{artist_name_safe}"
 
+        song_widget.setProperty("song_data", song)
+        apply_hover_effect(song_widget, "background: rgba(255, 255, 255, 10); border-radius: 8px;",
+                           "background: transparent;")
         return song_widget
+
+    def toggle_select_all(self):
+        if not self.track_widgets:
+            return
+
+        is_any_unchecked = any(not w.findChild(QCheckBox).isChecked() for w in self.track_widgets)
+        new_state = is_any_unchecked
+        for widget in self.track_widgets:
+            widget.findChild(QCheckBox).setChecked(new_state)
+
+        self.select_all_button.setText("Deselect All" if new_state else "Select All")
+
+    def import_selected_tracks(self):
+        selected_songs = [w.property("song_data") for w in self.track_widgets if w.findChild(QCheckBox).isChecked()]
+        if not selected_songs:
+            QMessageBox.warning(self, "No Songs Selected", "Please select at least one song to import.")
+            return
+
+        playlist_name = self.playlist_name_label.text()
+
+        main_window = self.parent()
+        if hasattr(main_window, 'start_playlist_import'):
+            main_window.start_playlist_import(selected_songs, playlist_name)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Error", "Cannot find the import handler. Import failed.")
 
     def load_pixmap_from_url(self, url, song):
         pixmap = QPixmapCache.find(url)
         if pixmap:
-            return pixmap
-
-        placeholder_pixmap = QPixmap(40, 40)
-        placeholder_pixmap.fill(Qt.transparent)
+            return pixmap.scaled(45, 45, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         downloader = ImageDownloader(url, song)
         downloader.signals.finished.connect(self.update_pixmap)
         self.threadpool.start(downloader)
 
-        return placeholder_pixmap
+        placeholder = QPixmap(45, 45)
+        placeholder.fill(Qt.transparent)
+        return placeholder
 
     def update_pixmap(self, url, pixmap):
         QPixmapCache.insert(url, pixmap)
-        for i in range(self.results_layout.count()):
-            item = self.results_layout.itemAt(i)
-            if item and item.widget():
-                widget = item.widget()
-                layout = widget.layout()
-                if layout:
-                    image_label = layout.itemAt(1).widget()
-                    if isinstance(image_label, QLabel) and image_label.property("url") == url:
-                        image_label.setPixmap(pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        for widget in self.track_widgets:
+            for child in widget.findChildren(QLabel):
+                if child.property("url") == url:
+                    child.setPixmap(pixmap.scaled(45, 45, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    break
 
 
 class EditPlaylistDialog(QDialog):
@@ -631,15 +858,6 @@ class EditPlaylistDialog(QDialog):
             self.update_cover_image()
             self.update_json()
 
-    def update_songs_list(self):
-        self.songs_list.clear()
-        for song_index in self.playlist_info['songs']:
-            song = self.all_songs[song_index]
-            item = QListWidgetItem()
-            item.setText(f"{song['song_name']} - {song['artist']}")
-            item.setIcon(QIcon(song['cover_location']))
-            self.songs_list.addItem(item)
-
     def remove_selected_songs(self):
         selected_items = self.songs_list.selectedItems()
         if not selected_items:
@@ -714,7 +932,7 @@ class EditPlaylistDialog(QDialog):
 
     def update_json(self):
         data_json_path = os.path.join(os.getcwd(), self.main_frame.get_data_file_path())
-        with open(data_json_path, 'r') as f:
+        with open(data_json_path) as f:
             data = json.load(f)
 
         data['All Songs'] = self.all_songs

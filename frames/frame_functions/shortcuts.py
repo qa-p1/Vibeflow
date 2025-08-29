@@ -1,5 +1,3 @@
-# frames/frame_functions/shortcuts.py
-
 from PySide6.QtCore import Qt
 
 
@@ -53,7 +51,7 @@ class ShortcutHandler:
         # --- Playback Controls ---
 
         # Spacebar: Play/Pause
-        if key == Qt.Key_V and modifiers == Qt.NoModifier:
+        if key == Qt.Key_W and modifiers == Qt.NoModifier:
             now_playing_view.play_pause()
             event.accept()
             return True
@@ -84,15 +82,11 @@ class ShortcutHandler:
             event.accept()
             return True
 
-
         elif key == Qt.Key_M and modifiers == Qt.NoModifier:
             self.main_window.audio_output.setMuted(not self.main_window.audio_output.isMuted())
             event.accept()
             return True
 
-        # --- UI Toggles & Actions ---
-
-        # L: Toggle Lyrics View
         elif key == Qt.Key_L and modifiers == Qt.NoModifier:
             if self.main_window.main_stack.currentWidget() == self.main_window.lyrics_view:
                 self.main_window.show_frame(self.main_window.main_view_widget)
@@ -101,7 +95,6 @@ class ShortcutHandler:
             event.accept()
             return True
 
-        # Q: Toggle Queue View
         elif key == Qt.Key_Q and modifiers == Qt.NoModifier:
             queue_view = now_playing_view.queue_view
             if queue_view.is_visible:
@@ -111,7 +104,6 @@ class ShortcutHandler:
             event.accept()
             return True
 
-        # S: Cycle Play Mode (Repeat, Repeat-One, Shuffle)
         elif key == Qt.Key_S and modifiers == Qt.NoModifier:
             now_playing_view.cycle_play_mode()
             event.accept()
@@ -123,5 +115,8 @@ class ShortcutHandler:
             event.accept()
             return True
 
-        # If no shortcut was handled, return False to allow default behavior
+        elif key == Qt.Key_M and modifiers == Qt.ControlModifier:
+            self.main_window.open_mini_player()
+            event.accept()
+            return True
         return False

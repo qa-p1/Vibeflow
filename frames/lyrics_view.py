@@ -1,11 +1,5 @@
-import colorsys
-
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QLabel, QFrame, QGraphicsScene, QGraphicsPixmapItem, \
-    QGraphicsBlurEffect, QHBoxLayout
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
-from PySide6.QtGui import QColor, QLinearGradient, QPalette, QFont, QImage, QPainter, QBrush, QPixmap, QPainterPath
-from colorthief import ColorThief
-
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QLabel, QFrame, QHBoxLayout
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from frames.frame_functions.utils import create_button
 
 
@@ -34,8 +28,6 @@ class LyricsView(QWidget):
         top_bar_layout.addWidget(back_button, alignment=Qt.AlignLeft)
         top_bar_layout.addStretch()
 
-
-
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -49,7 +41,7 @@ class LyricsView(QWidget):
 
         self.scroll_area.setWidget(self.lyrics_container)
         self.layout.addWidget(self.scroll_area)
-        self.top_bar_widget.raise_()# Add scroll area to main layout
+        self.top_bar_widget.raise_()  # Add scroll area to main layout
 
     def go_back(self):
         self.parent.show_frame(self.parent.main_view_widget)

@@ -4,20 +4,18 @@
 
 # VibeFlow Music 🎵
 
-VibeFlow Music is an all-in-one music player solution that combines the power of seamless music playback with modern features, beautiful interface, and hassle-free music downloading capabilities. Built with Python and PySide6, it offers a premium music experience without any subscriptions or advertisements.
+Yeah, you got it right by the name its another music player. Built with python in PYSIDE6 and made it so that you can or I can just focus on working while listening to the songs I like without ads.
 
-## 🌟 The Story Behind
+## ❔ Why did I built it?
 
-As a developer who codes while listening to music, I found myself increasingly frustrated with the limitations of existing music platforms and players. The constant interruption of ads on Spotify led me to search for alternatives, but I encountered a common problem: existing solutions were fragmented. Music players lacked downloading capabilities, downloaders lacked proper playback features, and applications that offered both often came with subscription fees or subpar user interfaces.
-
-This frustration sparked the creation of VibeFlow Music - a solution that seamlessly integrates all essential features into one elegant, user-friendly application.
+So basically I cannot work without music blasting in background, and I was irritated with ads like we all are , so I searched but nothing came up that I would daily drive so built one with all the things I needed no ads, quick and easy search and some good GUI 
 
 ## 🚀 Installation
 
 ### Method 1: Quick Install (Windows)
 1. Download the latest `Vibeflow-setup.exe` from the [releases page](https://github.com/qa-p1/Vibeflow/releases/tag/first)
 2. Run the installer and follow the on-screen instructions
-3. Launch VibeFlow Music and enjoy! 🎉
+3. Launch VibeFlow Music and enjoy! 
 
 ### Method 2: From Source
 1. Clone the repository:
@@ -45,39 +43,28 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Requirements
-- Python 3.8 or higher
-- PySide6
-- Other dependencies are listed in `requirements.txt`:
-  - PySide6
-  - spotipy
-  - yt_dlp
-
-### System Requirements
-- OS: Windows 10/11, macOS 10.14+, or Linux
-- RAM: 4GB minimum (8GB recommended)
-- Storage: 500MB for installation
 
 ---
-## ✨ Features
+## 😎 Features
 
 ### Core Functionality
-- 🎯 **Modern GUI Experience**: Built with PySide6 for a sleek, responsive interface
-- 🎶 **Advanced Music Queue Management**: Organize your listening experience
-- 📱 **Mini Player Mode**: Perfect for multitasking
-- 🎵 **Multiple Player Modes**: Adapt to your listening style
+-  **Modern GUI Experience**: Love Glassmorphism.
+-  **Music Queue Management**: Order however you like, and also you can reorder in the playlist by dragging and dropping.
+-  **Mini Player Mode**: We got 2 Versions **Mini** and **Micro**, so you can focus on work.
+-  **SMTC For windows**: Works with WIN smtc API
+-  **Multiple Player Modes**: Basic thing, just wanted to add more points.
 
 ### Music Management
-- 📃 **Lyrics Support**: Never miss a word of your favorite songs
-- 📂 **Multiple Playlist Options**: Organize your music library your way
-- 🔄 **Spotify Playlist Import**: Easily import your existing Spotify playlists
-- 🔍 **Smart Search**: Find your favorite music instantly
+-  **Lyrics Support**: You get a nice lyrics view thank ME.
+-  **Multiple Playlist Options**: BOOM groundbreaking feature.
+-  **Spotify Playlist Import**: Import your already made one here directly.
+-  **Easy Search**: Find your favorite music instantly 😎
 
 ### Enhanced Experience
-- ⏰ **Sleep Timer**: Perfect for falling asleep to music
-- ⬇️ **Easy Music Downloads**: Integrated downloading capability
-- 🎨 **Customizable Interface**: Tailor the app to your preferences
-- 🚀 **Regular Updates**: New features added frequently
+-  **Sleep Timer**: Good for SESSIONS
+- ️**Easy Music Downloads**: Integrated downloading capability
+-  **Suggestions**: It's a download and listen typa app but i thought its a cool thing to add, you might need you api key from groq.
+-  **Regular Updates**: New features added frequently(maybe a lie)
 ---
 ## 📁 Project Structure
 
@@ -89,11 +76,15 @@ python main.py
     │   ├── frame_functions
     │   │   ├── utils.py
     │   │   ├── playlists-functions.py
+    │   │   ├── shortcuts.py
+    │   │   ├── smtc_handler.py
+    │   │   ├── music_helper.py
     │   ├── lyrics_view.py
     │   ├── mini_player.py
     │   ├── music_player_frame.py
-    │   ├── player_frame.py
     │   ├── search_frame.py
+    │   ├── home_screen_frame.py
+    │   ├── picks_for_you.py
     │   └── settings_frame.py
     ├── icons
     │   ├── containing all the icons needed
@@ -101,38 +92,21 @@ python main.py
 ```
 
 ---
-## 🛠️ Technical Details
 
-- **Framework**: PySide6
-- **Language**: Python
-- **Architecture**: Modern, modular design for easy maintenance and updates.
+## 😁 Upcoming Features
 
-## 🔜 Upcoming Features
+### Basically I want to add some things that are I guess are left 
+- Most importantly I guess there's a feature or a whole thing I should work upon I directly adding songs to playlist without downloading them, I know I know what's the point of this APP then but main focus was just to build something for windows or ig mac's and linux further if this grows was simplicity a good old music player where you have your songs and enjoy them. If this works out , the preview feature and the picks for you player will also work then it will be a full fledged player but tbh I could not find a stable way to that currently when you click a song in picks for you section it searches with ddgs and gets a link to a mp3 (its not always the right song that's why all this is incomplete) . If I somehow I find a fast around that's not slow as yt_dlp one 6-7 sec and not as unstable as jio savaan workaround this project will be complete.
 
-We're constantly working to improve VibeFlow Music. Here are some features in our pipeline:
-- Enhanced visualization options
-- Advanced equalizer settings
-- Cross-platform sync capabilities
-- And much more!
+- **Settings Screen will be added soon**.
 
-## 💡 Philosophy
-
-VibeFlow Music is built on three core principles:
-1. **Simplicity**: Focus on the music, not the interface
-2. **Integration**: All essential features in one place
-3. **User Experience**: Smooth, intuitive, and enjoyable to use
-
+- Others things are just small things I will vibe code in future if I like that's all ig.
 ## 🤝 Contributing
 
-We welcome contributions! Whether it's bug reports, feature suggestions, or code contributions, every input helps make VibeFlow Music better for everyone.
+Yeah find bugs , Improve the already existing features if you can but mostly if you are contributing pls contribute to the main problem that I have described in the section above(big ass para).
 
-### How to Contribute
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Thanks if you read all this shit I wrote.
 
 ---
 
-<p align="center">Made with ❤️ for music lovers by music lovers by qa-p1</p>
+<p align="center">Made with 😈 for music lovers by music lovers by qa-p1 (AI generated text)</p>

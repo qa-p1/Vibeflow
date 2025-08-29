@@ -5,7 +5,6 @@ from PySide6.QtGui import QPixmap, QIcon, QPainter, QColor, QPainterPath, QFont,
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QVBoxLayout, QSlider,
                                QPushButton, QDialog, QSpinBox, QFrame, QListWidgetItem,
                                QListWidget, QSizePolicy, QGridLayout, QProgressBar)
-
 from .frame_functions.utils import create_button
 from colorthief import ColorThief
 
@@ -267,7 +266,8 @@ class QueueView(QWidget):
 
     def update_queue(self, playlist_songs_info):
         self.queue_list.clear()
-        if not playlist_songs_info: return
+        if not playlist_songs_info:
+            return
 
         current_index = self.parent().main_frame.current_song_index
         if current_index < 0 or current_index >= len(playlist_songs_info):
@@ -301,26 +301,29 @@ class QueueView(QWidget):
 
         if current_index > 0:
             self.queue_list.addItem(create_section_label("Previously Played"))
-            for i in range(current_index): self.queue_list.addItem(create_song_item(playlist_songs_info[i]))
+            for i in range(current_index):
+                self.queue_list.addItem(create_song_item(playlist_songs_info[i]))
 
         self.queue_list.addItem(create_song_item(playlist_songs_info[current_index], highlight=True))
 
         if current_index < len(playlist_songs_info) - 1:
             self.queue_list.addItem(create_section_label("Up Next"))
-            for i in range(current_index + 1, len(playlist_songs_info)): self.queue_list.addItem(
-                create_song_item(playlist_songs_info[i]))
+            for i in range(current_index + 1, len(playlist_songs_info)):
+                self.queue_list.addItem(create_song_item(playlist_songs_info[i]))
 
     def show_queue(self):
         if not self.is_visible:
             parent = self.parentWidget()
-            if not parent: return
+            if not parent:
+                return
             self.setGeometry(0, parent.height(), parent.width(), int(parent.height() * 0.7))
             self.show()
             self.animateBottomUp()
 
     def animateBottomUp(self):
         parent = self.parentWidget()
-        if not parent: return
+        if not parent:
+            return
         start_rect = QRect(0, parent.height(), parent.width(), self.height())
         end_rect = QRect(0, parent.height() - self.height(), parent.width(), self.height())
         self.animation.setStartValue(start_rect)
@@ -330,7 +333,8 @@ class QueueView(QWidget):
     def hide_queue(self):
         if self.is_visible:
             parent = self.parentWidget()
-            if not parent: return
+            if not parent:
+                return
             start_rect = self.geometry()
             end_rect = QRect(0, parent.height(), parent.width(), self.height())
             self.animation.setStartValue(start_rect)
@@ -377,7 +381,6 @@ class NowPlayingView(QWidget):
         self.ui_update_timer.setInterval(100)
         self.ui_update_timer.timeout.connect(self.update_player_ui)
         self.ui_update_timer.start()
-
 
     def setup_ui(self):
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -607,7 +610,8 @@ class NowPlayingView(QWidget):
             self.play_button.setIcon(QIcon("icons/play.png"))
 
     def play_pause(self):
-        if not self.main_frame.all_songs: return
+        if not self.main_frame.all_songs:
+            return
         player = self.main_frame.player
         if player.source().isEmpty():
             if self.main_frame.current_playlist and self.main_frame.current_song_index != -1:
@@ -643,7 +647,7 @@ class NowPlayingView(QWidget):
             return
         count = len(self.main_frame.current_playlist)
         if count == 0:
-                                                                                return
+            return
 
         self.main_frame.current_song_index = (self.main_frame.current_song_index - 1 + count) % count
         actual_idx = self.main_frame.current_playlist[self.main_frame.current_song_index]
@@ -697,7 +701,8 @@ class NowPlayingView(QWidget):
         self.sleep_timer_qtimer.stop()
         self.timer_button.setIcon(QIcon("icons/timer.png"))
         self.timer_label.hide()
-        if self.timer_dialog and self.timer_dialog.timer.isActive(): self.timer_dialog.stop_timer()
+        if self.timer_dialog and self.timer_dialog.timer.isActive():
+            self.timer_dialog.stop_timer()
 
     def update_timer_display(self):
         if self.remaining_time == QTime(0, 0, 0):

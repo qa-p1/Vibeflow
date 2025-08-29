@@ -1,32 +1,29 @@
 import json
 import os
 import sys
-import time
 from random import randint
+from frames.search_frame import SongDownloader
 if sys.platform == "win32":
     try:
         from frames.frame_functions.smtc_handler import SMTCHandler
     except ImportError:
         SMTCHandler = None
 from PySide6.QtGui import (QPainter, QPixmap, QFontDatabase, QImage, QPainterPath,
-                           QIcon, QMouseEvent, QColor, QLinearGradient, QBrush)
+                           QIcon, QColor, QLinearGradient, QBrush)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
-    QWidget, QFrame, QDialog, QMessageBox, QFileDialog,
+    QWidget, QDialog, QMessageBox, QFileDialog,
     QStackedWidget, QGraphicsOpacityEffect, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect
 )
-# ADDED QParallelAnimationGroup to imports
 from PySide6.QtCore import Qt, QUrl, QRectF, QTimer, QPropertyAnimation, QEasingCurve, QSize, QParallelAnimationGroup
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from frames.frame_functions.shortcuts import ShortcutHandler
-# Frame imports
-from frames.search_frame import SearchFrame
 from frames.lyrics_view import LyricsView
 from frames.music_player_frame import NowPlayingView
 from frames.mini_player import MiniPlayer
 from frames.home_screen_frame import HomeScreenFrame
 from frames.frame_functions.playlist_functions import CreatePlaylistDialog, update_playlists_to_json, \
-    ImportPlaylistsDialog
+    ImportPlaylistsDialog, DownloadProgressDialog
 
 
 class BackgroundStackedWidget(QStackedWidget):
@@ -71,7 +68,6 @@ class BackgroundStackedWidget(QStackedWidget):
 
                 painter.fillRect(self.rect(), QBrush(gradient))
 
-            # Apply a dark overlay for better text readability and UI element contrast
             painter.fillRect(self.rect(), QColor(0, 0, 0, 80))  # Increased darkness slightly
         else:
             # Default dark background if no image is set
@@ -83,6 +79,7 @@ class VibeFlow(QMainWindow):
         super().__init__()
         self.setWindowTitle("VibeFlow Music")
         self.playlist_cover_cache = {}
+        self.track_id_to_index_map = {}
         self.load_data()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
@@ -91,22 +88,25 @@ class VibeFlow(QMainWindow):
 
         self.current_playlist = []
         self.current_song_index = 0
-        self.url_to_song_info = {
-            QUrl.fromLocalFile(song["mp3_location"]).toString().lower().replace('file:///', ""): song for song in
-            self.all_songs}
 
-        # ADDED state variable for home screen panel
+        self.url_to_song_info = {}
+        self.rebuild_song_info_lookup()
+
         self.is_home_screen_expanded = True
         if not self.settings.get('download_path'):
             self.ask_for_download_path()
 
+        self.play_mode = "repeat"
+        # Initialize mini_player BEFORE init_ui
+        self.mini_player = MiniPlayer(self)
+        self.mini_player.hide()
+        self.download_queue = []
+        self.is_downloading_playlist = False
+        self.playlist_import_progress = {}
         self.init_ui()
         self.shortcut_handler = ShortcutHandler(self)
         self.setWindowIcon(QIcon("icons/vibeflow.ico"))
         self.setup_connections()
-        self.play_mode = "repeat"
-        self.mini_player = MiniPlayer(self)
-        self.mini_player.hide()
         QFontDatabase.addApplicationFont("font.ttf")
 
     def get_data_file_path(self):
@@ -141,6 +141,7 @@ class VibeFlow(QMainWindow):
             valid_indices = list(range(len(self.all_songs)))
             for p_name, p_data in self.playlists.items():
                 p_data['songs'] = [idx for idx in p_data.get('songs', []) if idx in valid_indices]
+        self.track_id_to_index_map = {song.get('id'): i for i, song in enumerate(self.all_songs) if song.get('id')}
 
     def init_ui(self):
         self.setMinimumSize(1280, 800)
@@ -180,6 +181,9 @@ class VibeFlow(QMainWindow):
         if sys.platform == "win32" and SMTCHandler:
             try:
                 self.smtc_handler = SMTCHandler(self)
+                self.smtc_handler.playPauseRequested.connect(self.now_playing_view.play_pause)
+                self.smtc_handler.nextRequested.connect(self.now_playing_view.next_song)
+                self.smtc_handler.prevRequested.connect(self.now_playing_view.prev_song)
                 print('yes')
             except Exception as e:
                 print(f"Failed to initialize SMTCHandler: {e}")
@@ -192,7 +196,9 @@ class VibeFlow(QMainWindow):
                 self.now_playing_view.update_info(song_info)
                 self.lyrics_view.set_lyrics(song_info.get('lyrics_location', ''))
                 self.player.setSource(QUrl.fromLocalFile(song_info["mp3_location"]))
-                self.smtc_handler.update_metadata(song_info)
+                self.mini_player.set_background_image(song_info['cover_location'])
+                if self.smtc_handler:
+                    self.smtc_handler.update_metadata(song_info)
             else:
                 self.current_song_index = -1
                 self.now_playing_view.update_info(None)
@@ -203,7 +209,12 @@ class VibeFlow(QMainWindow):
 
         self.home_screen_frame.display_playlists()
 
-    # ADDED METHOD to toggle the side panel
+    def rebuild_song_info_lookup(self):
+        """Rebuilds the URL-to-song-info dictionary consistently using the full URL string as the key."""
+        self.url_to_song_info = {
+            QUrl.fromLocalFile(song["mp3_location"]).toString().lower(): song for song in self.all_songs
+        }
+
     def toggle_home_screen(self):
         animation_duration = 350
 
@@ -367,25 +378,30 @@ class VibeFlow(QMainWindow):
             if self.play_mode == "shuffle":
                 if len(self.current_playlist) > 1:
                     new_idx = self.current_song_index
-                    while new_idx == self.current_song_index: new_idx = randint(0, len(self.current_playlist) - 1)
+                    while new_idx == self.current_song_index:
+                        new_idx = randint(0, len(self.current_playlist) - 1)
                     self.current_song_index = new_idx
                 else:
                     self.current_song_index = 0
             elif self.play_mode == "repeat":
                 self.current_song_index = (self.current_song_index + 1) % len(self.current_playlist)
             elif self.play_mode == "repeat_one":
-                self.player.setPosition(0);
-                self.player.play();
+                self.player.setPosition(0)
+                self.player.play()
                 return
 
             actual_idx = self.current_playlist[self.current_song_index]
             self.set_media(self.all_songs[actual_idx]["mp3_location"])
 
     def source_change_trigger(self):
-        path = self.player.source().toLocalFile().lower() if self.player.source().isLocalFile() else self.player.source().toString().lower()
+        if self.player.source().isEmpty():
+            return
+
+        path = self.player.source().toString().lower()
+
         if path not in self.url_to_song_info:
-            self.url_to_song_info = {QUrl.fromLocalFile(s["mp3_location"]).toString().lower(): s for s in
-                                     self.all_songs}
+            print(f"Path '{path}' not in song info lookup. Rebuilding.")
+            self.rebuild_song_info_lookup()
 
         if path in self.url_to_song_info:
             song_info = self.url_to_song_info[path]
@@ -400,7 +416,12 @@ class VibeFlow(QMainWindow):
             self.lyrics_view.set_lyrics(song_info.get('lyrics_location', ''))
             if self.smtc_handler:
                 self.smtc_handler.update_metadata(song_info)
+        else:
+            print(f"Error: Song with path '{path}' still not found after rebuilding lookup table.")
 
+    def get_song_index_by_id(self, track_id):
+        """Returns the index of a song in all_songs if it exists, otherwise None."""
+        return self.track_id_to_index_map.get(track_id)
 
     def open_import_playlist_dialog(self):
         dialog = ImportPlaylistsDialog(self)
@@ -408,7 +429,8 @@ class VibeFlow(QMainWindow):
         self.home_screen_frame.display_playlists()
 
     def open_mini_player(self):
-        if not self.all_songs: return
+        if not self.all_songs:
+            return
         source = self.player.source().toLocalFile().lower() if self.player.source().isLocalFile() else self.player.source().toString().lower()
         cover = self.url_to_song_info[source]['cover_location'] if source in self.url_to_song_info else \
             self.all_songs[0]['cover_location']
@@ -422,11 +444,161 @@ class VibeFlow(QMainWindow):
                 QMessageBox.warning(self, "Invalid Name", "Playlist name cannot be empty.")
                 return
             if name in self.playlists:
-                QMessageBox.warning(self, "Playlist Exists",f"A playlist named '{name}' already exists.")
+                QMessageBox.warning(self, "Playlist Exists", f"A playlist named '{name}' already exists.")
                 return
             self.playlists[name] = {'songs': indices, 'playlist_cover': cover}
             update_playlists_to_json(self.get_data_file_path(), self.playlists)
             self.home_screen_frame.display_playlists()
+
+    def find_existing_song_index(self, song_data):
+        """
+        Finds the index of an existing song.
+        First checks by track ID, then falls back to checking by name and artist.
+        """
+        track_id = song_data.get('id')
+        if track_id and not track_id.startswith('fallback_'):
+            existing_index = self.get_song_index_by_id(track_id)
+            if existing_index is not None:
+                return existing_index
+
+        # Fallback for songs without a reliable ID or with a fallback ID
+        try:
+            song_name_to_check = song_data['name'].lower().strip()
+            artist_name_to_check = song_data['artists'][0]['name'].lower().strip()
+
+            for i, existing_song in enumerate(self.all_songs):
+                existing_name = existing_song.get('song_name', '').lower().strip()
+                existing_artist = existing_song.get('artist', '').lower().strip()
+                if song_name_to_check == existing_name and artist_name_to_check == existing_artist:
+                    return i  # Found a match by name and artist
+        except (KeyError, IndexError):
+            pass  # Song data was malformed
+
+        return None  # No match found
+
+    def start_playlist_import(self, songs_to_download, playlist_name):
+        if self.is_downloading_playlist:
+            QMessageBox.information(self, "Import in Progress", "Another playlist import is already in progress.")
+            return
+
+        self.is_downloading_playlist = True
+        progress_dialog = DownloadProgressDialog(playlist_name, len(songs_to_download), self)
+        progress_dialog.populate_song_list(songs_to_download)
+
+        self.playlist_import_progress = {
+            "dialog": progress_dialog,
+            "playlist_name": playlist_name,
+            "songs_to_process": list(songs_to_download),
+            "newly_added_indices": [],
+            "failed_songs": []
+        }
+
+        progress_dialog.show()
+        self.process_next_in_queue()
+
+    def process_next_in_queue(self):
+        if not self.playlist_import_progress["songs_to_process"]:
+            self.finalize_playlist_import()
+            return
+
+        song_data = self.playlist_import_progress["songs_to_process"].pop(0)
+        dialog = self.playlist_import_progress["dialog"]
+
+        # --- CORE LOGIC CHANGE: Use the new, more robust checking method ---
+        existing_index = self.find_existing_song_index(song_data)
+        if existing_index is not None:
+            # Song already exists, so just add its index and skip download
+            self.playlist_import_progress["newly_added_indices"].append(existing_index)
+            dialog.update_song_status(song_data['id'], "In Library", "#a9b1d6")
+            QTimer.singleShot(50, self.process_next_in_queue)
+            return
+        # --- END OF CORE LOGIC CHANGE ---
+
+        dialog.update_song_status(song_data['id'], "Downloading...", "#e0e0e0")
+
+        downloader = SongDownloader(song_data, -1, self.settings['download_path'])
+        downloader.signals.finished.connect(
+            lambda new_song, ui_idx, s=song_data: self.on_playlist_song_downloaded(s, new_song)
+        )
+        downloader.signals.error.connect(
+            lambda error_msg, s=song_data: self.on_playlist_song_download_error(s, error_msg)
+        )
+        self.home_screen_frame.search_view_widget.threadpool.start(downloader)
+
+    def on_playlist_song_downloaded(self, original_song_data, new_song_info):
+        self.all_songs.append(new_song_info)
+        new_song_index = len(self.all_songs) - 1
+
+        self.track_id_to_index_map[new_song_info['id']] = new_song_index
+
+        self.playlist_import_progress["newly_added_indices"].append(new_song_index)
+
+        dialog = self.playlist_import_progress["dialog"]
+        dialog.update_song_status(original_song_data['id'], "Downloaded", "#4ecdc4")
+
+        self.process_next_in_queue()
+
+    def on_playlist_song_download_error(self, original_song_data, error_msg):
+        print(f"Failed to download {original_song_data['name']}: {error_msg}")
+        self.playlist_import_progress["failed_songs"].append(original_song_data)
+
+        dialog = self.playlist_import_progress["dialog"]
+        dialog.update_song_status(original_song_data['id'], "Failed", "#ff6b6b")
+
+        self.process_next_in_queue()
+
+    def finalize_playlist_import(self):
+        dialog = self.playlist_import_progress["dialog"]
+        original_playlist_name = self.playlist_import_progress["playlist_name"]
+        all_indices_for_new_playlist = self.playlist_import_progress["newly_added_indices"]
+
+        if not all_indices_for_new_playlist:
+            dialog.import_complete(original_playlist_name + " (Failed - No songs added)")
+            self.is_downloading_playlist = False
+            return
+
+        unique_playlist_name = original_playlist_name
+        counter = 1
+        while unique_playlist_name in self.playlists:
+            unique_playlist_name = f"{original_playlist_name} ({counter})"
+            counter += 1
+
+        self.playlists[unique_playlist_name] = {
+            'songs': all_indices_for_new_playlist,
+            'playlist_cover': 'auto'
+        }
+
+        if "All songs" in self.playlists:
+            all_songs_playlist = self.playlists["All songs"]["songs"]
+            genuinely_new_song_indices = [
+                idx for idx in all_indices_for_new_playlist if idx not in all_songs_playlist
+            ]
+            all_songs_playlist.extend(genuinely_new_song_indices)
+
+        self.save_all_data()
+        self.rebuild_song_info_lookup()
+        self.load_data()
+        self.home_screen_frame.display_playlists()
+        self.invalidate_playlist_cache(unique_playlist_name)
+
+        dialog.import_complete(unique_playlist_name)
+        self.is_downloading_playlist = False
+        self.playlist_import_progress = {}
+
+    def save_all_data(self):
+        """Saves both 'All Songs' and 'Playlists' to the JSON file."""
+        data_path = self.get_data_file_path()
+        try:
+            with open(data_path, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {"Settings": self.settings}
+
+        data['All Songs'] = self.all_songs
+        data['Playlists'] = self.playlists
+
+        with open(data_path, 'w') as f:
+            json.dump(data, f, indent=4)
 
     def generate_playlist_cover(self, playlist_name, size):
         if playlist_name in self.playlist_cover_cache and self.playlist_cover_cache[playlist_name].size() == QSize(size,
@@ -481,17 +653,150 @@ class VibeFlow(QMainWindow):
         return final
 
     def create_mosaic_cover(self, cover_paths, size):
-        mosaic = QImage(size, size, QImage.Format_ARGB32_Premultiplied);
+        mosaic = QImage(size, size, QImage.Format_ARGB32_Premultiplied)
         mosaic.fill(Qt.transparent)
-        painter = QPainter(mosaic);
+        painter = QPainter(mosaic)
         painter.setRenderHint(QPainter.Antialiasing)
         half = size // 2
         for i, path in enumerate(cover_paths[:4]):
             pix = QPixmap(path).scaled(half, half, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             x, y = (i % 2) * half, (i // 2) * half
             painter.drawPixmap(x + (half - pix.width()) / 2, y + (half - pix.height()) / 2, pix)
-        painter.end();
+        painter.end()
         return QPixmap.fromImage(mosaic)
+
+    def play_playlist(self, playlist_name):
+        """Play all songs from the specified playlist"""
+        if playlist_name not in self.playlists:
+            return
+
+        playlist_songs = self.playlists[playlist_name]['songs']
+        if not playlist_songs:
+            return
+
+        self.current_playlist = playlist_songs.copy()
+        self.current_song_index = 0
+
+        # Play the first song
+        first_song_idx = self.current_playlist[0]
+        if 0 <= first_song_idx < len(self.all_songs):
+            self.set_media(self.all_songs[first_song_idx]["mp3_location"])
+
+    def add_playlist_to_queue(self, playlist_name):
+        """Add all songs from playlist to the end of current queue"""
+        if playlist_name not in self.playlists:
+            return
+
+        playlist_songs = self.playlists[playlist_name]['songs']
+        if not playlist_songs:
+            return
+
+        # If no current playlist, just set it
+        if not self.current_playlist:
+            self.current_playlist = playlist_songs.copy()
+            self.current_song_index = 0
+            return
+
+        # Add to end of current playlist
+        for song_idx in playlist_songs:
+            if song_idx not in self.current_playlist:
+                self.current_playlist.append(song_idx)
+
+    def open_delete_playlist_dialog(self, playlist_name):
+        """Show confirmation dialog for deleting a playlist"""
+        from PySide6.QtWidgets import QMessageBox
+
+        if playlist_name == "All songs":
+            QMessageBox.warning(self, "Cannot Delete", "The 'All songs' playlist cannot be deleted.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Playlist",
+            f"Are you sure you want to delete the playlist '{playlist_name}'?\n\nThis action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            # Delete the playlist
+            if playlist_name in self.playlists:
+                del self.playlists[playlist_name]
+
+                # Update JSON file
+                self.save_playlists_to_json()
+
+                # Refresh the home screen display
+                self.home_screen_frame.display_playlists()
+
+                # Invalidate playlist cover cache
+                self.invalidate_playlist_cache(playlist_name)
+
+    def play_song_next(self, song_index):
+        """Add song to play next in queue (after current song)"""
+        if not self.current_playlist or self.current_song_index < 0:
+            # If no current playlist, create one with this song
+            self.current_playlist = [song_index]
+            self.current_song_index = 0
+            self.set_media(self.all_songs[song_index]["mp3_location"])
+            return
+
+        # Insert after current song
+        insert_position = self.current_song_index + 1
+        if song_index not in self.current_playlist:
+            self.current_playlist.insert(insert_position, song_index)
+        else:
+            # If song already exists, move it to next position
+            self.current_playlist.remove(song_index)
+            # Adjust current index if needed
+            if self.current_playlist.index(song_index) < self.current_song_index:
+                self.current_song_index -= 1
+            self.current_playlist.insert(insert_position, song_index)
+
+    def add_song_to_queue(self, song_index):
+        """Add song to the end of current queue"""
+        if not self.current_playlist:
+            # If no current playlist, create one with this song
+            self.current_playlist = [song_index]
+            self.current_song_index = 0
+            self.set_media(self.all_songs[song_index]["mp3_location"])
+            return
+
+        # Add to end if not already in playlist
+        if song_index not in self.current_playlist:
+            self.current_playlist.append(song_index)
+
+    def add_song_to_playlist(self, song_index, target_playlist_name):
+        """Add a song to the specified playlist"""
+        if target_playlist_name not in self.playlists:
+            return
+
+        playlist_songs = self.playlists[target_playlist_name]['songs']
+
+        # Add song if not already in playlist
+        if song_index not in playlist_songs:
+            playlist_songs.append(song_index)
+
+            # Update JSON file
+            self.save_playlists_to_json()
+
+            # Invalidate playlist cover cache since contents changed
+            self.invalidate_playlist_cache(target_playlist_name)
+
+    def save_playlists_to_json(self):
+        """Save the current playlists to JSON file"""
+        data_path = self.get_data_file_path()
+        try:
+            with open(data_path) as f:
+                data = json.load(f)
+
+            data['Playlists'] = self.playlists
+
+            with open(data_path, 'w') as f:
+                json.dump(data, f, indent=4)
+
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error saving playlists: {e}")
 
     def show_frame(self, frame_to_show, immediate=False):
         if self.main_stack.currentWidget() == frame_to_show:
@@ -528,31 +833,26 @@ class VibeFlow(QMainWindow):
         Overrides the default key press event to handle global shortcuts.
         Delegates the event to the ShortcutHandler.
         """
-        # Let the shortcut handler try to process the event first
         if self.shortcut_handler.handle_key_press(event):
-            # If the shortcut handler handled it, we're done
             return
 
-        # For certain keys that should never trigger default Qt navigation,
-        # accept them here to prevent the focus navigation box
         key = event.key()
         modifiers = event.modifiers()
 
-        # Prevent default focus navigation for these keys when used alone
         if modifiers == Qt.NoModifier and key in [
             Qt.Key_Space, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right
         ]:
-            # These keys are handled by our shortcut system, don't let Qt handle them
             event.accept()
             return
 
-        # Allow other keys to be processed normally by Qt
         super().keyPressEvent(event)
+
     def closeEvent(self, event):
         """Ensure the SMTC is cleaned up when the window closes."""
         if self.smtc_handler:
             self.smtc_handler.shutdown()
         super().closeEvent(event)
+
 
 def main():
     app = QApplication(sys.argv)

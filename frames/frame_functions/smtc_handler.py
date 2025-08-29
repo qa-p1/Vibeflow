@@ -2,6 +2,7 @@ import os
 import shutil
 import asyncio
 from pathlib import Path
+from PySide6.QtCore import QObject, Signal
 
 try:
     import winrt.windows.media.playback as win_media_playback
@@ -16,13 +17,17 @@ except ImportError:
     WINRT_AVAILABLE = False
 
 
-class SMTCHandler:
+class SMTCHandler(QObject):
     """
     Handles integration with Windows System Media Transport Controls (SMTC)
     using a dummy WinRT MediaPlayer for metadata + headset button control.
     """
+    playPauseRequested = Signal()
+    nextRequested = Signal()
+    prevRequested = Signal()
 
     def __init__(self, main_window):
+        super().__init__()
         self.enabled = False
         if not WINRT_AVAILABLE:
             return
@@ -54,8 +59,6 @@ class SMTCHandler:
             print(f"SMTC: Failed to initialize -> {e}")
             self.enabled = False
 
-    # ---------- INTERNAL HELPERS ----------
-
     def _safe_cover_path(self, cover_path):
         """Copy cover image to AppData\Roaming\VibeFlow Music\cover.png and return that path."""
         app_data_dir = Path(os.getenv('APPDATA')) / "VibeFlow Music"
@@ -74,8 +77,6 @@ class SMTCHandler:
         except Exception as e:
             print(f"SMTC: Failed to load thumbnail via StorageFile -> {e}")
             updater.thumbnail = None
-
-    # ---------- PUBLIC API ----------
 
     def update_metadata(self, song_info):
         if not self.enabled or not song_info:
@@ -145,8 +146,6 @@ class SMTCHandler:
         except Exception as e:
             print(f"SMTC: Shutdown failed -> {e}")
 
-    # ---------- BUTTON HANDLERS ----------
-
     def _on_button_pressed(self, sender, args):
         if not self.enabled:
             return
@@ -163,33 +162,26 @@ class SMTCHandler:
         except Exception as e:
             print(f"SMTC: Button handler failed -> {e}")
 
-    # ---------- APP-SPECIFIC ACTIONS ----------
 
     def _qt_play_pause(self):
-        """Handle play/pause from SMTC - call the main app's play_pause method"""
+        """Handle play/pause from SMTC - EMITS a signal to be handled on the main thread."""
         try:
-            # Call the play_pause method from NowPlayingView which handles all the logic
-            self.main_window.now_playing_view.play_pause()
+            self.playPauseRequested.emit()
         except Exception as e:
-            print(f"SMTC: Play/pause failed -> {e}")
+            print(f"SMTC: Emitting play/pause signal failed -> {e}")
 
     def _qt_next(self):
-        print("next")
-        """Handle next song from SMTC"""
+        """Handle next song from SMTC - EMITS a signal."""
         try:
-            if hasattr(self.main_window, 'now_playing_view'):
-                self.main_window.now_playing_view.next_song()
-            else:
-                print("SMTC: now_playing_view not found")
+            print("SMTC: Next button pressed, emitting signal.")
+            self.nextRequested.emit()
         except Exception as e:
-            print(f"SMTC: Next song failed -> {e}")
+            print(f"SMTC: Emitting next signal failed -> {e}")
 
     def _qt_prev(self):
-        """Handle previous song from SMTC"""
+        """Handle previous song from SMTC - EMITS a signal."""
         try:
-            if hasattr(self.main_window, 'now_playing_view'):
-                self.main_window.now_playing_view.prev_song()
-            else:
-                print("SMTC: now_playing_view not found")
+            print("SMTC: Previous button pressed, emitting signal.")
+            self.prevRequested.emit()
         except Exception as e:
-            print(f"SMTC: Previous song failed -> {e}")
+            print(f"SMTC: Emitting previous signal failed -> {e}")

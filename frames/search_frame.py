@@ -3,30 +3,21 @@ import os
 import re
 import requests
 import urllib.request
-from PySide6.QtCore import (
-    Qt, QByteArray, QObject, Signal, QRunnable, QThreadPool, QUrl, Slot,
-    QSize, QRectF
-)
-from PySide6.QtGui import (
-    QPixmap, QPixmapCache, QIcon, QPainter, QPainterPath, QColor, QLinearGradient, QBrush
-)
+from PySide6.QtCore import Qt, QByteArray, QObject, Signal, QRunnable, QThreadPool, QUrl, Slot, QSize, QRectF
+from PySide6.QtGui import QPixmap, QPixmapCache, QIcon, QPainter, QPainterPath, QColor, QLinearGradient, QBrush
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QScrollArea,
-    QFrame
-)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QScrollArea
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from yt_dlp import YoutubeDL
-
-from frames.frame_functions.utils import create_button
+from frames.frame_functions.utils import create_button, name_label
 
 # Initialize Spotipy
 try:
     sp = spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
-            client_id="baf2d72ae6054acf91dca4f10f8e3f2e",
-            client_secret="aa9bbc0e087445a0a8799e676cd3ca5d",
+            client_id="2658ededc64b43dab40216de5d6f2b71",
+            client_secret="ce0ccaf83df34d3ea629a4938a36511c",
         )
     )
 except Exception as e:
@@ -40,8 +31,10 @@ class SearchResultCardWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.setFixedHeight(80)
+
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.is_hovered = False
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -115,9 +108,10 @@ def sanitize_filename(filename):
     return filename[:200]
 
 
-class DownloadWorker(QRunnable):
+class SongDownloader(QRunnable):
     class Signals(QObject):
-        finished = Signal(str, str, str, int)
+        # MODIFIED: Signal now emits a dictionary and the original UI index
+        finished = Signal(dict, int)
         error = Signal(str, int)
         progress = Signal(str, int)
 
@@ -131,9 +125,11 @@ class DownloadWorker(QRunnable):
     @Slot()
     def run(self):
         try:
+            # This part is the same as before
             song_name = self.track_info["name"]
             artist_name = self.track_info["artists"][0]["name"]
             track_id = self.track_info.get("id", song_name + artist_name)
+            artist_id = self.track_info['artists'][0]['id']
             safe_fb = sanitize_filename(f"{song_name}_{artist_name}")
             cover_url = self.track_info["album"]["images"][0]["url"] if self.track_info["album"]["images"] else None
             cover_path = os.path.join(self.download_path, f"{safe_fb}.png")
@@ -151,11 +147,10 @@ class DownloadWorker(QRunnable):
                 'format': 'bestaudio/best',
                 'outtmpl': mp3_path,
                 'noplaylist': True,
-                'quiet': True,
                 'no_warnings': True,
-                'default_search': 'ytsearch1'
+                'default_search': 'ytsearch1',
+                'quiet': True
             }
-
             with YoutubeDL(ydl_opts) as ydl:
                 ydl.download([f"{song_name} {artist_name} audio"])
                 self.signals.progress.emit("MP3 downloaded", self.ui_index)
@@ -166,9 +161,7 @@ class DownloadWorker(QRunnable):
                 resp = requests.get(lyrics_url, timeout=10)
                 resp.raise_for_status()
                 lyrics_data = resp.json()
-                lyrics_txt = lyrics_data[0].get('syncedLyrics') or lyrics_data[0].get('plainLyrics') if lyrics_data and \
-                                                                                                        lyrics_data[
-                                                                                                            0] else None
+                lyrics_txt = lyrics_data[0].get('syncedLyrics') or lyrics_data[0].get('plainLyrics') if lyrics_data and lyrics_data[0] else None
                 with open(lrc_path, 'w', encoding='utf-8') as f:
                     f.write(lyrics_txt or "")
                 self.signals.progress.emit("Lyrics fetched" if lyrics_txt else "No lyrics", self.ui_index)
@@ -176,7 +169,21 @@ class DownloadWorker(QRunnable):
                 open(lrc_path, 'w').close()
                 self.signals.progress.emit("Lyrics fetch error", self.ui_index)
 
-            self.signals.finished.emit(song_name, artist_name, track_id, self.ui_index)
+            # --- MODIFICATION START ---
+            # Construct the final song dictionary here INSIDE the worker
+            new_song_dict = {
+                "song_name": song_name,
+                "artist": artist_name,
+                "mp3_location": mp3_path,
+                "cover_location": cover_path if os.path.exists(cover_path) else "icons/default-image.png",
+                "lyrics_location": lrc_path if os.path.exists(lrc_path) else "",
+                "id": track_id,
+                "artist_id": artist_id
+            }
+
+            # Emit the complete dictionary and the UI index
+            self.signals.finished.emit(new_song_dict, self.ui_index)
+            # --- MODIFICATION END ---
         except Exception as e:
             self.signals.error.emit(str(e), self.ui_index)
 
@@ -239,6 +246,7 @@ class SearchFrame(QWidget):
         self.results_scroll_area = QScrollArea()
         self.results_scroll_area.setWidgetResizable(True)
         self.results_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.results_scroll_area.setStyleSheet("background: transparent; border: none;")
 
         self.results_container = QWidget()
@@ -334,7 +342,6 @@ class SearchFrame(QWidget):
         layout.setContentsMargins(15, 10, 15, 10)
         layout.setSpacing(15)
 
-
         art_label = QLabel()
         art_label.setFixedSize(60, 60)
         art_label.setStyleSheet("background: transparent; border-radius: 8px;")
@@ -355,17 +362,15 @@ class SearchFrame(QWidget):
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(2)
 
-        title_label = QLabel(track_data.get('name', 'N/A'))
+        title_label = name_label(track_data.get('name', 'N/A'))
+        title_label.setFixedWidth(100)
         title_label.setStyleSheet("color: #e0e0e0; font-size: 15px; font-weight: 500; background: transparent;")
-        artist_label = QLabel(track_data['artists'][0]['name'] if track_data['artists'] else 'N/A')
+
+        artist_label = name_label(track_data['artists'][0]['name'] if track_data['artists'] else 'N/A')
         artist_label.setStyleSheet("color: #a0a0a0; font-size: 13px; background: transparent;")
 
-        for label, full_text in [(title_label, track_data.get('name', 'N/A')),
-                                 (artist_label, track_data['artists'][0]['name'] if track_data['artists'] else 'N/A')]:
-            fm = label.fontMetrics()
-            elided_text = fm.elidedText(full_text, Qt.ElideRight, 300)
-            label.setText(elided_text)
-            label.setToolTip(full_text)
+        title_label.setToolTip(track_data.get('name', 'N/A'))
+        artist_label.setToolTip(track_data['artists'][0]['name'] if track_data['artists'] else 'N/A')
 
         text_layout.addWidget(title_label)
         text_layout.addWidget(artist_label)
@@ -388,9 +393,18 @@ class SearchFrame(QWidget):
         self.preview_buttons[ui_index] = preview_btn
 
         download_btn = create_button("icons/download.png", lambda: self.initiate_download(track_data, ui_index), 28)
-        download_btn.setToolTip("Download")
         download_btn.setStyleSheet(button_style)
         self.download_buttons[ui_index] = download_btn
+
+        track_id = track_data.get('id')
+        print(track_id, self.main_frame.get_song_index_by_id(track_id))
+        if track_id and self.main_frame.get_song_index_by_id(track_id) is not None:
+            download_btn.setIcon(QIcon("icons/complete.png"))
+            download_btn.setEnabled(False)
+            download_btn.setToolTip("Already in library")
+            self.active_downloads[ui_index] = "completed"
+        else:
+            download_btn.setToolTip("Download")
 
         actions_layout.addWidget(preview_btn)
         actions_layout.addWidget(download_btn)
@@ -406,8 +420,9 @@ class SearchFrame(QWidget):
             card.deleteLater()
         self.result_cards.clear()
 
-        while self.results_layout.count() > 1:  # Keep the status label
-            item = self.results_layout.takeAt(0)
+        # Remove only the result cards, not the status label
+        for i in range(self.results_layout.count() - 1, 0, -1):  # Start from end, skip index 0 (status_label)
+            item = self.results_layout.takeAt(i)
             if widget := item.widget():
                 widget.deleteLater()
 
@@ -485,6 +500,14 @@ class SearchFrame(QWidget):
         if ui_index in self.active_downloads and self.active_downloads[ui_index] in ["downloading", "completed"]:
             return
 
+        track_id = track_data.get('id')
+        if track_id and self.main_frame.get_song_index_by_id(track_id) is not None:
+            if ui_index in self.download_buttons:
+                self.download_buttons[ui_index].setIcon(QIcon("icons/complete.png"))
+                self.download_buttons[ui_index].setEnabled(False)
+                self.download_buttons[ui_index].setToolTip("Already in library")
+            return
+
         data_json_path = self.main_frame.get_data_file_path()
         try:
             with open(data_json_path, "r") as f:
@@ -497,7 +520,7 @@ class SearchFrame(QWidget):
 
         os.makedirs(download_path, exist_ok=True)
 
-        worker = DownloadWorker(track_data, ui_index, download_path)
+        worker = SongDownloader(track_data, ui_index, download_path) # Renamed
         worker.signals.finished.connect(self.on_download_complete)
         worker.signals.error.connect(self.on_download_error)
         worker.signals.progress.connect(self.on_download_progress)
@@ -514,7 +537,7 @@ class SearchFrame(QWidget):
         if ui_index in self.download_buttons:
             self.download_buttons[ui_index].setToolTip(message)
 
-    def on_download_complete(self, song_name, artist_name, track_id, ui_index):
+    def on_download_complete(self, new_song_info, ui_index):
         self.active_downloads[ui_index] = "completed"
 
         if ui_index in self.download_buttons:
@@ -526,25 +549,17 @@ class SearchFrame(QWidget):
         try:
             with open(data_json_path, "r+") as f:
                 data = json.load(f)
-                download_path = data["Settings"]["download_path"]
-                safe_fb = sanitize_filename(f"{song_name}_{artist_name}")
-                mp3_loc = os.path.join(download_path, f"{safe_fb}.mp3")
 
-                if any(s.get("mp3_location", "").lower() == mp3_loc.lower() for s in data["All Songs"]):
+                # Check if song already exists (double-check)
+                if any(s.get("id") == new_song_info["id"] for s in data["All Songs"]):
                     return
 
-                new_song = {
-                    "song_name": song_name, "artist": artist_name, "mp3_location": mp3_loc,
-                    "cover_location": os.path.join(download_path, f"{safe_fb}.png") if os.path.exists(
-                        os.path.join(download_path, f"{safe_fb}.png")) else "icons/default-image.png",
-                    "lyrics_location": os.path.join(download_path, f"{safe_fb}.lrc") if os.path.exists(
-                        os.path.join(download_path, f"{safe_fb}.lrc")) else "", "id": track_id
-                }
-                data["All Songs"].append(new_song)
+                data["All Songs"].append(new_song_info)
                 new_idx = len(data["All Songs"]) - 1
                 if "All songs" not in data["Playlists"]:
                     data["Playlists"]["All songs"] = {"songs": [], "playlist_cover": "auto"}
                 data["Playlists"]["All songs"]["songs"].append(new_idx)
+
                 f.seek(0)
                 f.truncate()
                 json.dump(data, f, indent=4)
@@ -556,9 +571,8 @@ class SearchFrame(QWidget):
             return
 
         self.main_frame.load_data()
-        self.main_frame.home_screen_frame.display_playlists()  # Corrected refresh call
-        self.main_frame.url_to_song_info = {QUrl.fromLocalFile(s["mp3_location"]).toString().lower(): s for s in
-                                            self.main_frame.all_songs}
+        self.main_frame.rebuild_song_info_lookup()
+        self.main_frame.home_screen_frame.display_playlists()
 
     def on_download_error(self, error_message, ui_index):
         self.active_downloads[ui_index] = "error"

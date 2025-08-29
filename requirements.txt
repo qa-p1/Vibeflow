@@ -1,5 +1,14 @@
 PySide6~=6.7.0
-spotipy~=2.23.0
+spotipy~=2.25.1
 yt_dlp
 colorthief~=0.2.1
-requests~=2.29.0
+requests~=2.32.4
+winrt-Windows.Media.Playback
+winrt-Windows.Media
+winrt-Windows.Storage
+winrt-Windows.Storage.Streams
+winrt-Windows.Foundation
+urllib3~=2.5.0
+ddgs~=9.5.4
+pyDes~=2.0.1
+groq~=0.31.0

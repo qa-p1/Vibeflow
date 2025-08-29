@@ -1,13 +1,10 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-                               QPushButton, QStackedWidget, QFrame, QApplication, QMenu, QDialog)  # Added QMenu
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QRectF, QMimeData
-from PySide6.QtGui import (QPixmap, QPainter, QPainterPath, QColor, QLinearGradient,
-                           QBrush, QDrag, QAction)  # Added QAction
-from frames.frame_functions.utils import apply_hover_effect, name_label, create_button
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QStackedWidget, QApplication, QMenu, QDialog
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QRectF, QMimeData, QTimer
+from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QBrush, QDrag, QAction
+from frames.frame_functions.utils import name_label, create_button
 from frames.frame_functions.playlist_functions import EditPlaylistDialog
 from frames.search_frame import SearchFrame
-import json
-
+from frames.picks_for_you import PicksForYouWidget
 
 class GlassmorphismWidget(QWidget):
     """Custom widget that applies glassmorphism effect"""
@@ -101,9 +98,8 @@ class PlaylistCardWidget(QWidget):
         dialog = EditPlaylistDialog(self, playlist_name)
         if dialog.exec() == QDialog.Accepted:
             self.home_frame.main_frame.load_data()
-            self.all_songs = self.home_frame.main_frame.all_songs
-            self.playlists = self.home_frame.main_frame.playlists
-    # NEW: Context menu for playlist actions
+            self.home_frame.display_playlists()
+
     def contextMenuEvent(self, event):
         if not self.home_frame or not self.playlist_name:
             return
@@ -225,7 +221,6 @@ class SongCardWidget(QWidget):
         if event.button() == Qt.LeftButton:
             self.drag_start_position = event.pos()
             self.drag_started = False
-        # IMPORTANT: Pass the event to the base class to allow context menu event to fire on right-click
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -249,14 +244,11 @@ class SongCardWidget(QWidget):
             self.home_frame.main_frame.play_song_from_sidebar(self.song_index, self.playlist_name)
         super().mouseDoubleClickEvent(event)
 
-    # NEW: Context menu for song actions
     def contextMenuEvent(self, event):
         if self.song_index is None or not self.playlist_name or not self.home_frame:
             return
 
         menu = QMenu(self)
-
-        # Apply glassmorphism styling to menu
         menu.setStyleSheet("""
             QMenu {
                 background-color: rgba(40, 40, 40, 200);
@@ -293,7 +285,6 @@ class SongCardWidget(QWidget):
         add_to_queue_action = QAction("Add to Queue", self)
         remove_action = QAction("Remove from this Playlist", self)
 
-        # Connect actions to methods on the main_frame or home_frame
         play_next_action.triggered.connect(lambda: main_frame.play_song_next(self.song_index))
         add_to_queue_action.triggered.connect(lambda: main_frame.add_song_to_queue(self.song_index))
         remove_action.triggered.connect(lambda: self.home_frame.remove_song_from_current_playlist(self.song_index))
@@ -303,7 +294,7 @@ class SongCardWidget(QWidget):
 
         # Sub-menu for "Add to Playlist..."
         add_to_playlist_menu = QMenu("Add to Playlist...", menu)
-        add_to_playlist_menu.setStyleSheet(menu.styleSheet())  # Apply same styling to submenu
+        add_to_playlist_menu.setStyleSheet(menu.styleSheet())
 
         other_playlists = [p for p in main_frame.playlists if p != self.playlist_name]
 
@@ -311,7 +302,6 @@ class SongCardWidget(QWidget):
             add_to_playlist_menu.setEnabled(False)
         else:
             for p_name in other_playlists:
-                # Use a lambda with a default argument to capture the current playlist name in the loop
                 action = QAction(p_name, self)
                 action.triggered.connect(
                     lambda checked=False, p=p_name: main_frame.add_song_to_playlist(self.song_index, p))
@@ -356,19 +346,42 @@ class SongCardWidget(QWidget):
         self.is_being_dragged = True
         self.update()
 
-        # Execute drag
-        dropAction = drag.exec(Qt.MoveAction)
+        # Execute the drag - this blocks until drag is complete
+        drop_action = drag.exec_(Qt.MoveAction)
 
+        # Clean up after drag
         self.is_being_dragged = False
         self.drag_started = False
         self.update()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText() and event.source() != self:
-            event.acceptProposedAction()
-            # Show drop indicator
-            if hasattr(self.home_frame, 'show_drop_indicator'):
-                self.home_frame.show_drop_indicator(self)
+            # Check if it's from the same playlist
+            try:
+                data = event.mimeData().text()
+                source_index, source_playlist = data.split('|')
+                if source_playlist == self.playlist_name:
+                    event.acceptProposedAction()
+                    # Show drop indicator
+                    if hasattr(self.home_frame, 'show_drop_indicator'):
+                        self.home_frame.show_drop_indicator(self)
+                    return
+            except ValueError:
+                pass
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        # Accept the drag move event to keep the drag active
+        if event.mimeData().hasText() and event.source() != self:
+            try:
+                data = event.mimeData().text()
+                source_index, source_playlist = data.split('|')
+                if source_playlist == self.playlist_name:
+                    event.acceptProposedAction()
+                    return
+            except ValueError:
+                pass
+        event.ignore()
 
     def dragLeaveEvent(self, event):
         # Hide drop indicator
@@ -382,7 +395,7 @@ class SongCardWidget(QWidget):
                 source_index, source_playlist = data.split('|')
                 source_index = int(source_index)
 
-                if source_playlist == self.playlist_name:
+                if source_playlist == self.playlist_name and source_index != self.song_index:
                     # Perform the reorder
                     self.home_frame.reorder_song_in_playlist(
                         source_index, self.song_index, self.playlist_name
@@ -415,7 +428,6 @@ class HomeScreenFrame(QWidget):
         self.drop_indicator = None
         self.init_ui()
 
-
     def init_ui(self):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 20, 15, 20)
@@ -429,22 +441,11 @@ class HomeScreenFrame(QWidget):
         self.setup_search_view()
 
         # Create glassmorphism container for "Picks for You"
-        picks_glass_container = GlassmorphismWidget(self, blur_intensity=0.12, border_opacity=0.25)
-        picks_layout = QVBoxLayout(picks_glass_container)
-        picks_layout.setContentsMargins(20, 15, 20, 15)
-        picks_layout.setSpacing(10)
-
-        picks_label = QLabel("Picks for You")
-        picks_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #eeeeee; background: transparent;")
-        picks_layout.addWidget(picks_label)
-
-        coming_soon_label = QLabel("Coming soon...")
-        coming_soon_label.setStyleSheet("color: #a0a0a0; font-size: 14px; background: transparent;")
-        picks_layout.addWidget(coming_soon_label, alignment=Qt.AlignCenter)
-        picks_layout.addStretch()
-
+        self.picks_widget = PicksForYouWidget(self.main_frame)
         self.layout.addWidget(self.content_stack, 65)
-        self.layout.addWidget(picks_glass_container, 35)
+        self.layout.addWidget(self.picks_widget, 35)
+
+        QTimer.singleShot(1000, self.picks_widget.load_recommendations)
 
     def setup_playlist_view(self):
         # Create main glassmorphism container for playlists
@@ -566,8 +567,7 @@ class HomeScreenFrame(QWidget):
         cover.setPixmap(self.main_frame.generate_playlist_cover(name, 60))
         cover.setStyleSheet("background: transparent;")
 
-        name_widget = name_label(name,
-                                 styleSheet="font-size: 16px; font-weight: 500; color: #e0e0e0; background: transparent;")
+        name_widget = name_label(name, styleSheet="font-size: 16px; font-weight: 500; color: #e0e0e0; background: transparent;")
 
         layout.addWidget(cover)
         layout.addWidget(name_widget, 1)
@@ -656,7 +656,7 @@ class HomeScreenFrame(QWidget):
             playlist_songs.insert(target_pos, song_to_move)
 
             # Update JSON file
-            self.save_playlists_to_json()
+            self.main_frame.save_playlists_to_json()
 
             # Refresh the display
             self.display_songs_for_playlist(playlist_name)
@@ -675,27 +675,12 @@ class HomeScreenFrame(QWidget):
 
         try:
             playlist_songs.remove(song_index)
-            self.save_playlists_to_json()
+            self.main_frame.save_playlists_to_json()
             # Refresh the view to show the song has been removed
             self.display_songs_for_playlist(self.current_playlist_name)
         except ValueError:
             # Song not found in list, do nothing
             pass
-
-    def save_playlists_to_json(self):
-        """Save the current playlists to JSON file"""
-        data_path = self.main_frame.get_data_file_path()
-        try:
-            with open(data_path, 'r') as f:
-                data = json.load(f)
-
-            data['Playlists'] = self.main_frame.playlists
-
-            with open(data_path, 'w') as f:
-                json.dump(data, f, indent=4)
-
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Error saving playlists: {e}")
 
     def show_drop_indicator(self, target_card):
         """Show drop indicator above the target card"""
