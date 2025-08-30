@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://res.cloudinary.com/db2vusdvh/image/upload/v1733220951/VibeFlow_Music_o3mren.png"/>
+  <img src="https://res.cloudinary.com/dqluuilri/image/upload/v1756579986/vibeflow_he0upv.png"/>
 </p>
 
 # VibeFlow Music 🎵
