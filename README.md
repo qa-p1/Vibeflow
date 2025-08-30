@@ -13,7 +13,7 @@ So basically I cannot work without music blasting in background, and I was irrit
 ## 🚀 Installation
 
 ### Method 1: Quick Install (Windows)
-1. Download the latest `Vibeflow-setup.exe` from the [releases page](https://github.com/qa-p1/Vibeflow/releases/tag/first)
+1. Download the latest `Vibeflow-setup.exe` from the [releases page](https://github.com/qa-p1/Vibeflow/releases)
 2. Run the installer and follow the on-screen instructions
 3. Launch VibeFlow Music and enjoy! 
 
