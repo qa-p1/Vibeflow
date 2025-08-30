@@ -79,6 +79,7 @@ python main.py
     │   │   ├── shortcuts.py
     │   │   ├── smtc_handler.py
     │   │   ├── music_helper.py
+    │   │   ├── shortcut_guide.py
     │   ├── lyrics_view.py
     │   ├── mini_player.py
     │   ├── music_player_frame.py
