@@ -24,7 +24,10 @@ from frames.mini_player import MiniPlayer
 from frames.home_screen_frame import HomeScreenFrame
 from frames.frame_functions.playlist_functions import CreatePlaylistDialog, update_playlists_to_json, \
     ImportPlaylistsDialog, DownloadProgressDialog
-
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from groq import Groq
+from frames.frame_functions.shortcut_guide import ShortcutGuideDialog
 
 class BackgroundStackedWidget(QStackedWidget):
     def __init__(self, parent=None):
@@ -36,21 +39,17 @@ class BackgroundStackedWidget(QStackedWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Get background data from main window
         if (hasattr(self.main_window, 'background_pixmap') and
                 not self.main_window.background_pixmap.isNull()):
 
-            # Create blurred background from the current background_pixmap
             blurred_bg = self.main_window.create_blurred_background(
                 self.main_window.background_pixmap, self.size())
             painter.drawPixmap(0, 0, blurred_bg)
 
-            # Apply gradient overlay using dominant colors
             if (hasattr(self.main_window, 'dominant_colors') and
                     self.main_window.dominant_colors):
-                gradient = QLinearGradient(0, 0, 0, self.height())  # Vertical gradient
+                gradient = QLinearGradient(0, 0, 0, self.height())
 
-                # Use first two dominant colors, or just the first if only one
                 color1_rgb = self.main_window.dominant_colors[0]
                 color2_rgb = (self.main_window.dominant_colors[1]
                               if len(self.main_window.dominant_colors) > 1
@@ -59,18 +58,16 @@ class BackgroundStackedWidget(QStackedWidget):
                 color1 = QColor(*color1_rgb)
                 color2 = QColor(*color2_rgb)
 
-                # Adjust alpha for subtlety
-                color1.setAlpha(180)  # More opaque at the top
-                color2.setAlpha(120)  # More transparent at the bottom
+                color1.setAlpha(180)
+                color2.setAlpha(120)
 
-                gradient.setColorAt(0, color1)  # Start color at top
-                gradient.setColorAt(1, color2)  # End color at bottom
+                gradient.setColorAt(0, color1)
+                gradient.setColorAt(1, color2)
 
                 painter.fillRect(self.rect(), QBrush(gradient))
 
-            painter.fillRect(self.rect(), QColor(0, 0, 0, 80))  # Increased darkness slightly
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 80))
         else:
-            # Default dark background if no image is set
             painter.fillRect(self.rect(), QColor(20, 20, 20))
 
 
@@ -78,9 +75,13 @@ class VibeFlow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("VibeFlow Music")
+        self.sp = None
+        self.groq_client = None
+        self.shortcut_guide = None
         self.playlist_cover_cache = {}
         self.track_id_to_index_map = {}
         self.load_data()
+        self.init_api_clients()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
@@ -97,7 +98,6 @@ class VibeFlow(QMainWindow):
             self.ask_for_download_path()
 
         self.play_mode = "repeat"
-        # Initialize mini_player BEFORE init_ui
         self.mini_player = MiniPlayer(self)
         self.mini_player.hide()
         self.download_queue = []
@@ -122,7 +122,13 @@ class VibeFlow(QMainWindow):
                 default_data = {
                     "All Songs": [],
                     "Playlists": {"All songs": {"songs": [], "playlist_cover": "auto"}},
-                    "Settings": {"download_path": "", "recently_played": []}
+                    "Settings": {
+                        "download_path": "",
+                        "recently_played": [],
+                        "groq_api_key": "",
+                        "spotify_client_id": "",
+                        "spotify_client_secret": ""
+                    }
                 }
                 json.dump(default_data, f, indent=4)
             self.all_songs = default_data["All Songs"]
@@ -136,6 +142,12 @@ class VibeFlow(QMainWindow):
                 if "All songs" not in self.playlists:
                     self.playlists["All songs"] = {"songs": list(range(len(self.all_songs))), "playlist_cover": "auto"}
                 self.settings = data.get("Settings", {"download_path": "", "recently_played": []})
+                self.settings = data.get("Settings", {})
+                self.settings.setdefault("download_path", "")
+                self.settings.setdefault("recently_played", [])
+                self.settings.setdefault("groq_api_key", "")
+                self.settings.setdefault("spotify_client_id", "")
+                self.settings.setdefault("spotify_client_secret", "")
 
         if self.all_songs and "All songs" in self.playlists:
             valid_indices = list(range(len(self.all_songs)))
@@ -143,6 +155,38 @@ class VibeFlow(QMainWindow):
                 p_data['songs'] = [idx for idx in p_data.get('songs', []) if idx in valid_indices]
         self.track_id_to_index_map = {song.get('id'): i for i, song in enumerate(self.all_songs) if song.get('id')}
 
+    def init_api_clients(self):
+        """Initializes Spotify and Groq clients using keys from settings."""
+        groq_key = self.settings.get('groq_api_key')
+        if groq_key:
+            try:
+                self.groq_client = Groq(api_key=groq_key)
+                print("Groq client initialized successfully.")
+            except Exception as e:
+                self.groq_client = None
+                print(f"Failed to initialize Groq client: {e}")
+        else:
+            self.groq_client = None
+            print("Groq API key not found in settings.")
+
+        client_id = self.settings.get('spotify_client_id')
+        client_secret = self.settings.get('spotify_client_secret')
+        if client_id and client_secret:
+            try:
+                self.sp = spotipy.Spotify(
+                    auth_manager=SpotifyClientCredentials(
+                        client_id=client_id,
+                        client_secret=client_secret,
+                    )
+                )
+                self.sp.search('test', limit=1, type='track')
+                print("Spotify client initialized successfully.")
+            except Exception as e:
+                self.sp = None
+                print(f"Failed to initialize Spotify client: {e}")
+        else:
+            self.sp = None
+            print("Spotify credentials not found in settings.")
     def init_ui(self):
         self.setMinimumSize(1280, 800)
         self.dominant_colors = []
@@ -159,7 +203,6 @@ class VibeFlow(QMainWindow):
         self.main_view_widget = QWidget()
         self.main_view_widget.setStyleSheet("background: transparent;")
 
-        # This layout is the one to manipulate via animation
         self.main_view_layout = QHBoxLayout(self.main_view_widget)
         self.main_view_layout.setContentsMargins(0, 0, 0, 0)
         self.main_view_layout.setSpacing(0)
@@ -167,7 +210,6 @@ class VibeFlow(QMainWindow):
         self.now_playing_view = NowPlayingView(self)
         self.home_screen_frame = HomeScreenFrame(self)
 
-        # The initial stretch factors remain the same
         self.main_view_layout.addWidget(self.now_playing_view, 65)
         self.main_view_layout.addWidget(self.home_screen_frame, 35)
 
@@ -232,7 +274,6 @@ class VibeFlow(QMainWindow):
         self.home_screen_anim_group.addAnimation(min_anim)
 
         if self.is_home_screen_expanded:
-            # COLLAPSE
             current_width = self.home_screen_frame.width()
             max_anim.setStartValue(current_width)
             max_anim.setEndValue(0)
@@ -241,7 +282,6 @@ class VibeFlow(QMainWindow):
 
             self.home_screen_anim_group.finished.connect(self.home_screen_frame.hide)
         else:
-            # EXPAND
             target_width = int(self.main_view_widget.width() * 0.35)
 
             self.home_screen_frame.setMinimumWidth(0)
@@ -266,31 +306,27 @@ class VibeFlow(QMainWindow):
     def create_blurred_background(self, pixmap, size):
         scaled_pixmap = pixmap.scaled(size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
 
-        # Center the scaled image if it's larger than the target size
         centered_pixmap = QPixmap(size)
         centered_pixmap.fill(Qt.transparent)
 
         painter = QPainter(centered_pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Calculate position to center the scaled image
         x_offset = (size.width() - scaled_pixmap.width()) // 2
         y_offset = (size.height() - scaled_pixmap.height()) // 2
 
         painter.drawPixmap(x_offset, y_offset, scaled_pixmap)
         painter.end()
 
-        # Apply blur using QGraphicsBlurEffect
         scene = QGraphicsScene()
         pixmap_item = QGraphicsPixmapItem()
         pixmap_item.setPixmap(centered_pixmap)
 
         blur_effect = QGraphicsBlurEffect()
-        blur_effect.setBlurRadius(20)  # Adjust blur radius as needed
+        blur_effect.setBlurRadius(20)
         pixmap_item.setGraphicsEffect(blur_effect)
         scene.addItem(pixmap_item)
 
-        # Render the scene to a new QImage
         blurred_image = QImage(size, QImage.Format_ARGB32_Premultiplied)
         blurred_image.fill(Qt.transparent)
 
@@ -332,10 +368,10 @@ class VibeFlow(QMainWindow):
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             data = {}
-        data.setdefault('Settings', {})['download_path'] = self.settings.get('download_path', '')
+        data['Settings'] = self.settings
+
         with open(path, 'w') as f:
             json.dump(data, f, indent=4)
-        self.settings = data['Settings']
 
     def setup_connections(self):
         self.player.playbackStateChanged.connect(self.play_back_state)
@@ -461,7 +497,6 @@ class VibeFlow(QMainWindow):
             if existing_index is not None:
                 return existing_index
 
-        # Fallback for songs without a reliable ID or with a fallback ID
         try:
             song_name_to_check = song_data['name'].lower().strip()
             artist_name_to_check = song_data['artists'][0]['name'].lower().strip()
@@ -470,11 +505,11 @@ class VibeFlow(QMainWindow):
                 existing_name = existing_song.get('song_name', '').lower().strip()
                 existing_artist = existing_song.get('artist', '').lower().strip()
                 if song_name_to_check == existing_name and artist_name_to_check == existing_artist:
-                    return i  # Found a match by name and artist
+                    return i
         except (KeyError, IndexError):
-            pass  # Song data was malformed
+            pass
 
-        return None  # No match found
+        return None
 
     def start_playlist_import(self, songs_to_download, playlist_name):
         if self.is_downloading_playlist:
@@ -504,15 +539,12 @@ class VibeFlow(QMainWindow):
         song_data = self.playlist_import_progress["songs_to_process"].pop(0)
         dialog = self.playlist_import_progress["dialog"]
 
-        # --- CORE LOGIC CHANGE: Use the new, more robust checking method ---
         existing_index = self.find_existing_song_index(song_data)
         if existing_index is not None:
-            # Song already exists, so just add its index and skip download
             self.playlist_import_progress["newly_added_indices"].append(existing_index)
             dialog.update_song_status(song_data['id'], "In Library", "#a9b1d6")
             QTimer.singleShot(50, self.process_next_in_queue)
             return
-        # --- END OF CORE LOGIC CHANGE ---
 
         dialog.update_song_status(song_data['id'], "Downloading...", "#e0e0e0")
 
@@ -625,19 +657,16 @@ class VibeFlow(QMainWindow):
             painter.end()
             return rounded
 
-        # Handle empty playlist
         if not indices:
             final = round_corners(QPixmap("icons/music.png"))
             self.playlist_cover_cache[playlist_name] = final
             return final
 
-        # Handle custom cover
         if cover_type != "auto" and os.path.exists(cover_type):
             final = round_corners(QPixmap(cover_type))
             self.playlist_cover_cache[playlist_name] = final
             return final
 
-        # Handle auto-generated cover
         covers = [self.all_songs[i]["cover_location"] for i in indices if
                   0 <= i < len(self.all_songs) and os.path.exists(self.all_songs[i]["cover_location"])]
 
@@ -646,7 +675,6 @@ class VibeFlow(QMainWindow):
             self.playlist_cover_cache[playlist_name] = final
             return final
 
-        # Create cover from available covers
         cover_pixmap = QPixmap(covers[0]) if len(covers) < 4 else self.create_mosaic_cover(covers, size)
         final = round_corners(cover_pixmap)
         self.playlist_cover_cache[playlist_name] = final
@@ -677,7 +705,6 @@ class VibeFlow(QMainWindow):
         self.current_playlist = playlist_songs.copy()
         self.current_song_index = 0
 
-        # Play the first song
         first_song_idx = self.current_playlist[0]
         if 0 <= first_song_idx < len(self.all_songs):
             self.set_media(self.all_songs[first_song_idx]["mp3_location"])
@@ -691,13 +718,11 @@ class VibeFlow(QMainWindow):
         if not playlist_songs:
             return
 
-        # If no current playlist, just set it
         if not self.current_playlist:
             self.current_playlist = playlist_songs.copy()
             self.current_song_index = 0
             return
 
-        # Add to end of current playlist
         for song_idx in playlist_songs:
             if song_idx not in self.current_playlist:
                 self.current_playlist.append(song_idx)
@@ -719,36 +744,28 @@ class VibeFlow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
-            # Delete the playlist
             if playlist_name in self.playlists:
                 del self.playlists[playlist_name]
 
-                # Update JSON file
                 self.save_playlists_to_json()
 
-                # Refresh the home screen display
                 self.home_screen_frame.display_playlists()
 
-                # Invalidate playlist cover cache
                 self.invalidate_playlist_cache(playlist_name)
 
     def play_song_next(self, song_index):
         """Add song to play next in queue (after current song)"""
         if not self.current_playlist or self.current_song_index < 0:
-            # If no current playlist, create one with this song
             self.current_playlist = [song_index]
             self.current_song_index = 0
             self.set_media(self.all_songs[song_index]["mp3_location"])
             return
 
-        # Insert after current song
         insert_position = self.current_song_index + 1
         if song_index not in self.current_playlist:
             self.current_playlist.insert(insert_position, song_index)
         else:
-            # If song already exists, move it to next position
             self.current_playlist.remove(song_index)
-            # Adjust current index if needed
             if self.current_playlist.index(song_index) < self.current_song_index:
                 self.current_song_index -= 1
             self.current_playlist.insert(insert_position, song_index)
@@ -756,13 +773,11 @@ class VibeFlow(QMainWindow):
     def add_song_to_queue(self, song_index):
         """Add song to the end of current queue"""
         if not self.current_playlist:
-            # If no current playlist, create one with this song
             self.current_playlist = [song_index]
             self.current_song_index = 0
             self.set_media(self.all_songs[song_index]["mp3_location"])
             return
 
-        # Add to end if not already in playlist
         if song_index not in self.current_playlist:
             self.current_playlist.append(song_index)
 
@@ -773,14 +788,11 @@ class VibeFlow(QMainWindow):
 
         playlist_songs = self.playlists[target_playlist_name]['songs']
 
-        # Add song if not already in playlist
         if song_index not in playlist_songs:
             playlist_songs.append(song_index)
 
-            # Update JSON file
             self.save_playlists_to_json()
 
-            # Invalidate playlist cover cache since contents changed
             self.invalidate_playlist_cache(target_playlist_name)
 
     def save_playlists_to_json(self):
@@ -797,6 +809,16 @@ class VibeFlow(QMainWindow):
 
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Error saving playlists: {e}")
+
+    def show_shortcut_guide(self):
+        """
+        Creates (if needed) and shows the shortcut guide dialog.
+        This is the single point of entry for showing the guide.
+        """
+        if self.shortcut_guide is None:
+            self.shortcut_guide = ShortcutGuideDialog(self)
+
+        self.shortcut_guide.exec()
 
     def show_frame(self, frame_to_show, immediate=False):
         if self.main_stack.currentWidget() == frame_to_show:

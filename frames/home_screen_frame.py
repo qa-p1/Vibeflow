@@ -1,10 +1,14 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QStackedWidget, QApplication, QMenu, QDialog
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QRectF, QMimeData, QTimer
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QStackedWidget, QApplication, \
+    QMenu, QDialog
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QRectF, QMimeData, \
+    QTimer
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QBrush, QDrag, QAction
 from frames.frame_functions.utils import name_label, create_button
 from frames.frame_functions.playlist_functions import EditPlaylistDialog
 from frames.search_frame import SearchFrame
 from frames.picks_for_you import PicksForYouWidget
+from frames.settings_frame import SettingsFrame
+
 
 class GlassmorphismWidget(QWidget):
     """Custom widget that applies glassmorphism effect"""
@@ -19,22 +23,18 @@ class GlassmorphismWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Create rounded rectangle path
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 12, 12)
         painter.setClipPath(path)
 
-        # Semi-transparent background with slight tint
         background_color = QColor(255, 255, 255, int(self.blur_intensity * 255))
         painter.fillRect(self.rect(), background_color)
 
-        # Add subtle gradient overlay
         gradient = QLinearGradient(0, 0, 0, self.height())
         gradient.setColorAt(0, QColor(255, 255, 255, int(self.blur_intensity * 80)))
         gradient.setColorAt(1, QColor(0, 0, 0, int(self.blur_intensity * 40)))
         painter.fillRect(self.rect(), QBrush(gradient))
 
-        # Draw border
         painter.setClipping(False)
         painter.setPen(QColor(255, 255, 255, int(self.border_opacity * 255)))
         painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 12, 12)
@@ -45,7 +45,6 @@ class GlassmorphismWidget(QWidget):
 class PlaylistCardWidget(QWidget):
     """Enhanced playlist card with subtle glassmorphism and context menu"""
 
-    # MODIFIED: Added home_frame and playlist_name for context menu functionality
     def __init__(self, parent=None, home_frame=None, playlist_name=None):
         super().__init__(parent)
         self.setFixedHeight(70)
@@ -58,28 +57,23 @@ class PlaylistCardWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Create rounded rectangle path
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 8, 8)
         painter.setClipPath(path)
 
         if self.is_hovered:
-            # Stronger glassmorphism effect on hover
             background_color = QColor(255, 255, 255, 25)
             painter.fillRect(self.rect(), background_color)
 
-            # Subtle gradient
             gradient = QLinearGradient(0, 0, 0, self.height())
             gradient.setColorAt(0, QColor(255, 255, 255, 15))
             gradient.setColorAt(1, QColor(0, 0, 0, 10))
             painter.fillRect(self.rect(), QBrush(gradient))
 
-            # Border
             painter.setClipping(False)
             painter.setPen(QColor(255, 255, 255, 60))
             painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
         else:
-            # Transparent background when not hovered
             painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
 
         super().paintEvent(event)
@@ -106,7 +100,6 @@ class PlaylistCardWidget(QWidget):
 
         menu = QMenu(self)
 
-        # Apply glassmorphism styling to menu
         menu.setStyleSheet("""
             QMenu {
                 background-color: rgba(40, 40, 40, 200);
@@ -141,7 +134,6 @@ class PlaylistCardWidget(QWidget):
         rename_action = QAction("Rename", self)
         delete_action = QAction("Delete Playlist", self)
 
-        # Connect actions to methods on the main_frame
         play_action.triggered.connect(lambda: main_frame.play_playlist(self.playlist_name))
         add_to_queue_action.triggered.connect(lambda: main_frame.add_playlist_to_queue(self.playlist_name))
         rename_action.triggered.connect(lambda: self.edit_playlist(self.playlist_name))
@@ -181,34 +173,28 @@ class SongCardWidget(QWidget):
         self.drag_start_position = None
         self.drag_started = False
 
-        # Enable drag and drop
         self.setAcceptDrops(True)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Create rounded rectangle path
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 8, 8)
         painter.setClipPath(path)
 
         if self.is_being_dragged:
-            # Dim the card when being dragged
             background_color = QColor(255, 255, 255, 10)
             painter.fillRect(self.rect(), background_color)
         elif self.is_hovered:
-            # Glassmorphism effect on hover
             background_color = QColor(255, 255, 255, 20)
             painter.fillRect(self.rect(), background_color)
 
-            # Subtle gradient
             gradient = QLinearGradient(0, 0, 0, self.height())
             gradient.setColorAt(0, QColor(255, 255, 255, 12))
             gradient.setColorAt(1, QColor(0, 0, 0, 8))
             painter.fillRect(self.rect(), QBrush(gradient))
 
-            # Border
             painter.setClipping(False)
             painter.setPen(QColor(255, 255, 255, 50))
             painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
@@ -224,14 +210,11 @@ class SongCardWidget(QWidget):
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        # Only handle single clicks if no drag occurred
         if (event.button() == Qt.LeftButton and
                 self.drag_start_position and
                 not self.drag_started):
 
-            # Check if mouse moved significantly (if so, it might have been an attempted drag)
             if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
-                # This was a click, not a drag attempt - do nothing for single click
                 pass
 
         self.drag_start_position = None
@@ -292,7 +275,6 @@ class SongCardWidget(QWidget):
         menu.addAction(play_next_action)
         menu.addAction(add_to_queue_action)
 
-        # Sub-menu for "Add to Playlist..."
         add_to_playlist_menu = QMenu("Add to Playlist...", menu)
         add_to_playlist_menu.setStyleSheet(menu.styleSheet())
 
@@ -329,11 +311,9 @@ class SongCardWidget(QWidget):
         drag = QDrag(self)
         mimeData = QMimeData()
 
-        # Store the song index and playlist name in mime data
         mimeData.setText(f"{self.song_index}|{self.playlist_name}")
         drag.setMimeData(mimeData)
 
-        # Create drag pixmap (a semi-transparent version of the card)
         pixmap = self.grab()
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
@@ -346,23 +326,19 @@ class SongCardWidget(QWidget):
         self.is_being_dragged = True
         self.update()
 
-        # Execute the drag - this blocks until drag is complete
-        drop_action = drag.exec_(Qt.MoveAction)
+        drag.exec_(Qt.MoveAction)
 
-        # Clean up after drag
         self.is_being_dragged = False
         self.drag_started = False
         self.update()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText() and event.source() != self:
-            # Check if it's from the same playlist
             try:
                 data = event.mimeData().text()
                 source_index, source_playlist = data.split('|')
                 if source_playlist == self.playlist_name:
                     event.acceptProposedAction()
-                    # Show drop indicator
                     if hasattr(self.home_frame, 'show_drop_indicator'):
                         self.home_frame.show_drop_indicator(self)
                     return
@@ -371,7 +347,6 @@ class SongCardWidget(QWidget):
         event.ignore()
 
     def dragMoveEvent(self, event):
-        # Accept the drag move event to keep the drag active
         if event.mimeData().hasText() and event.source() != self:
             try:
                 data = event.mimeData().text()
@@ -384,7 +359,6 @@ class SongCardWidget(QWidget):
         event.ignore()
 
     def dragLeaveEvent(self, event):
-        # Hide drop indicator
         if hasattr(self.home_frame, 'hide_drop_indicator'):
             self.home_frame.hide_drop_indicator()
 
@@ -396,7 +370,6 @@ class SongCardWidget(QWidget):
                 source_index = int(source_index)
 
                 if source_playlist == self.playlist_name and source_index != self.song_index:
-                    # Perform the reorder
                     self.home_frame.reorder_song_in_playlist(
                         source_index, self.song_index, self.playlist_name
                     )
@@ -404,7 +377,6 @@ class SongCardWidget(QWidget):
             except (ValueError, AttributeError):
                 pass
 
-        # Hide drop indicator
         if hasattr(self.home_frame, 'hide_drop_indicator'):
             self.home_frame.hide_drop_indicator()
 
@@ -440,15 +412,14 @@ class HomeScreenFrame(QWidget):
         self.setup_song_list_view()
         self.setup_search_view()
 
-        # Create glassmorphism container for "Picks for You"
         self.picks_widget = PicksForYouWidget(self.main_frame)
         self.layout.addWidget(self.content_stack, 65)
         self.layout.addWidget(self.picks_widget, 35)
+        self.setup_settings_view()
 
         QTimer.singleShot(1000, self.picks_widget.load_recommendations)
 
     def setup_playlist_view(self):
-        # Create main glassmorphism container for playlists
         self.playlist_glass_container = GlassmorphismWidget(self, blur_intensity=0.12, border_opacity=0.25)
 
         layout = QVBoxLayout(self.playlist_glass_container)
@@ -463,7 +434,7 @@ class HomeScreenFrame(QWidget):
         header.addWidget(create_button("icons/search.png", self.show_search, 24))
         header.addWidget(create_button("icons/import.png", self.main_frame.open_import_playlist_dialog, 24))
         header.addWidget(create_button("icons/plus.png", self.main_frame.open_create_playlist_dialog, 24))
-
+        header.addWidget(create_button("icons/settings.png", self.show_settings, 24))
         layout.addLayout(header)
 
         scroll = QScrollArea()
@@ -490,7 +461,6 @@ class HomeScreenFrame(QWidget):
         self.content_stack.addWidget(self.playlist_glass_container)
 
     def setup_song_list_view(self):
-        # Create glassmorphism container for song list
         self.song_glass_container = GlassmorphismWidget(self, blur_intensity=0.12, border_opacity=0.25)
 
         layout = QVBoxLayout(self.song_glass_container)
@@ -528,23 +498,31 @@ class HomeScreenFrame(QWidget):
         scroll.setWidget(self.song_list_container)
         layout.addWidget(scroll)
 
-        # Create drop indicator
         self.drop_indicator = DropIndicator(self.song_list_container)
 
         self.content_stack.addWidget(self.song_glass_container)
 
     def setup_search_view(self):
-        # Create glassmorphism container for search
         self.search_glass_container = GlassmorphismWidget(self, blur_intensity=0.12, border_opacity=0.25)
         search_layout = QVBoxLayout(self.search_glass_container)
         search_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Instantiate SearchFrame and pass a callback for its back button
         self.search_view_widget = SearchFrame(self.main_frame, back_callback=self.show_playlists)
         self.search_view_widget.setStyleSheet("background: transparent;")
         search_layout.addWidget(self.search_view_widget)
 
         self.content_stack.addWidget(self.search_glass_container)
+
+    def setup_settings_view(self):
+        self.settings_glass_container = GlassmorphismWidget(self, blur_intensity=0.12, border_opacity=0.25)
+        settings_layout = QVBoxLayout(self.settings_glass_container)
+        settings_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.settings_view_widget = SettingsFrame(self.main_frame, back_callback=self.show_playlists)
+        self.settings_view_widget.setStyleSheet("background: transparent;")
+        settings_layout.addWidget(self.settings_view_widget)
+
+        self.content_stack.addWidget(self.settings_glass_container)
 
     def display_playlists(self):
         while self.playlist_list_layout.count():
@@ -557,7 +535,6 @@ class HomeScreenFrame(QWidget):
         self.playlist_list_layout.addStretch()
 
     def create_playlist_card(self, name):
-        # MODIFIED: Pass home_frame and playlist_name to the card
         card = PlaylistCardWidget(home_frame=self, playlist_name=name)
         layout = QHBoxLayout(card)
         layout.setContentsMargins(10, 5, 10, 5)
@@ -567,7 +544,8 @@ class HomeScreenFrame(QWidget):
         cover.setPixmap(self.main_frame.generate_playlist_cover(name, 60))
         cover.setStyleSheet("background: transparent;")
 
-        name_widget = name_label(name, styleSheet="font-size: 16px; font-weight: 500; color: #e0e0e0; background: transparent;")
+        name_widget = name_label(name,
+                                 styleSheet="font-size: 16px; font-weight: 500; color: #e0e0e0; background: transparent;")
 
         layout.addWidget(cover)
         layout.addWidget(name_widget, 1)
@@ -635,7 +613,6 @@ class HomeScreenFrame(QWidget):
         layout.addLayout(info_layout, 1)
 
         card.setCursor(Qt.PointingHandCursor)
-        # Remove the old mousePressEvent handler - now using double-click and context menu
 
         return card
 
@@ -647,25 +624,19 @@ class HomeScreenFrame(QWidget):
         playlist_songs = self.main_frame.playlists[playlist_name]['songs']
 
         try:
-            # Find positions in the playlist
             source_pos = playlist_songs.index(source_index)
             target_pos = playlist_songs.index(target_index)
 
-            # Remove source song and insert at target position
             song_to_move = playlist_songs.pop(source_pos)
             playlist_songs.insert(target_pos, song_to_move)
 
-            # Update JSON file
             self.main_frame.save_playlists_to_json()
 
-            # Refresh the display
             self.display_songs_for_playlist(playlist_name)
 
         except ValueError:
-            # Handle case where indices are not found
             pass
 
-    # NEW: Method to handle removing a song from the currently viewed playlist
     def remove_song_from_current_playlist(self, song_index):
         """Removes a song from the currently displayed playlist and refreshes the view."""
         if self.current_playlist_name not in self.main_frame.playlists:
@@ -676,10 +647,8 @@ class HomeScreenFrame(QWidget):
         try:
             playlist_songs.remove(song_index)
             self.main_frame.save_playlists_to_json()
-            # Refresh the view to show the song has been removed
             self.display_songs_for_playlist(self.current_playlist_name)
         except ValueError:
-            # Song not found in list, do nothing
             pass
 
     def show_drop_indicator(self, target_card):
@@ -687,7 +656,6 @@ class HomeScreenFrame(QWidget):
         if not self.drop_indicator:
             return
 
-        # Position the drop indicator above the target card
         card_pos = target_card.pos()
         self.drop_indicator.move(card_pos.x(), card_pos.y() - 2)
         self.drop_indicator.resize(target_card.width(), 3)
@@ -704,6 +672,9 @@ class HomeScreenFrame(QWidget):
 
     def show_search(self):
         self.animate_transition(self.search_glass_container)
+
+    def show_settings(self):
+        self.animate_transition(self.settings_glass_container)
 
     def animate_transition(self, target_widget, from_right=True):
         if self.content_stack.currentWidget() == target_widget:

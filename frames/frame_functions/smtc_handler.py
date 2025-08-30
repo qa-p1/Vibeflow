@@ -82,7 +82,6 @@ class SMTCHandler(QObject):
         if not self.enabled or not song_info:
             return
 
-        # Skip if no actual media loaded
         try:
             if not self.player.source().isLocalFile() or not self.player.source().toLocalFile():
                 return

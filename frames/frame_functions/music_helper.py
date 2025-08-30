@@ -11,10 +11,8 @@ except ImportError:
     print("Please install it using: pip install py-des", file=sys.stderr)
     sys.exit(1)
 
-# Disable the annoying SSL warnings that show up because of verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- Global headers to mimic a browser ---
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }

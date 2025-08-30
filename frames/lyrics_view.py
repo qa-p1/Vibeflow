@@ -41,7 +41,7 @@ class LyricsView(QWidget):
 
         self.scroll_area.setWidget(self.lyrics_container)
         self.layout.addWidget(self.scroll_area)
-        self.top_bar_widget.raise_()  # Add scroll area to main layout
+        self.top_bar_widget.raise_()
 
     def go_back(self):
         self.parent.show_frame(self.parent.main_view_widget)
@@ -72,11 +72,9 @@ class LyricsView(QWidget):
         for i in reversed(range(self.lyrics_layout.count())):
             self.lyrics_layout.itemAt(i).widget().setParent(None)
 
-        # Add spacers to center the first lyrics
         scroll_area_height = self.scroll_area.height()
-        spacer_height = int(scroll_area_height / 2) - 50  # Center minus some offset
+        spacer_height = int(scroll_area_height / 2) - 50
 
-        # Top spacer to push first lyrics to center
         top_spacer = QLabel()
         top_spacer.setFixedHeight(spacer_height)
         top_spacer.setStyleSheet("background: transparent;")
@@ -89,7 +87,6 @@ class LyricsView(QWidget):
             label.setProperty("lyric_index", i)
             label.setCursor(Qt.PointingHandCursor)
             label.mousePressEvent = lambda event, index=i: self.lyric_clicked(index)
-            # Add some padding between lyrics
             label.setStyleSheet("""
                 QLabel {
                     padding: 15px 20px;
@@ -98,7 +95,6 @@ class LyricsView(QWidget):
             """)
             self.lyrics_layout.addWidget(label)
 
-        # Bottom spacer
         bottom_spacer = QLabel()
         bottom_spacer.setFixedHeight(spacer_height)
         bottom_spacer.setStyleSheet("background: transparent;")
@@ -107,11 +103,9 @@ class LyricsView(QWidget):
         self.update_lyrics_style()
 
     def display_no_lyrics(self):
-        # Clear existing widgets
         for i in reversed(range(self.lyrics_layout.count())):
             self.lyrics_layout.itemAt(i).widget().setParent(None)
 
-        # Center the "no lyrics" message
         scroll_area_height = self.scroll_area.height()
         spacer_height = int(scroll_area_height / 2) - 25
 
@@ -166,7 +160,6 @@ class LyricsView(QWidget):
         if self.current_lyric_index < 0 or self.current_lyric_index >= len(self.lyrics):
             return
 
-        # Account for the top spacer (index 0) when finding the current label
         current_label = self.lyrics_layout.itemAt(self.current_lyric_index + 1).widget()
         if not current_label:
             return
@@ -208,7 +201,6 @@ class LyricsView(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Redisplay lyrics to adjust spacers for new size
         if self.lyrics:
             self.display_lyrics()
         self.scroll_to_current_lyric()

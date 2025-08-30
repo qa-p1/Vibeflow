@@ -7,22 +7,9 @@ from PySide6.QtCore import Qt, QByteArray, QObject, Signal, QRunnable, QThreadPo
 from PySide6.QtGui import QPixmap, QPixmapCache, QIcon, QPainter, QPainterPath, QColor, QLinearGradient, QBrush
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QScrollArea
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 from yt_dlp import YoutubeDL
 from frames.frame_functions.utils import create_button, name_label
 
-# Initialize Spotipy
-try:
-    sp = spotipy.Spotify(
-        auth_manager=SpotifyClientCredentials(
-            client_id="2658ededc64b43dab40216de5d6f2b71",
-            client_secret="ce0ccaf83df34d3ea629a4938a36511c",
-        )
-    )
-except Exception as e:
-    print(f"Spotipy initialization error: {e}")
-    sp = None
 
 
 class SearchResultCardWidget(QWidget):
@@ -43,22 +30,18 @@ class SearchResultCardWidget(QWidget):
         painter.setClipPath(path)
 
         if self.is_hovered:
-            # Stronger glassmorphism effect on hover
             background_color = QColor(255, 255, 255, 25)
             painter.fillRect(self.rect(), background_color)
 
-            # Subtle gradient
             gradient = QLinearGradient(0, 0, 0, self.height())
             gradient.setColorAt(0, QColor(255, 255, 255, 15))
             gradient.setColorAt(1, QColor(0, 0, 0, 10))
             painter.fillRect(self.rect(), QBrush(gradient))
 
-            # Border
             painter.setClipping(False)
             painter.setPen(QColor(255, 255, 255, 60))
             painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 10, 10)
         else:
-            # Transparent background when not hovered
             painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
 
         super().paintEvent(event)
@@ -110,7 +93,6 @@ def sanitize_filename(filename):
 
 class SongDownloader(QRunnable):
     class Signals(QObject):
-        # MODIFIED: Signal now emits a dictionary and the original UI index
         finished = Signal(dict, int)
         error = Signal(str, int)
         progress = Signal(str, int)
@@ -125,7 +107,6 @@ class SongDownloader(QRunnable):
     @Slot()
     def run(self):
         try:
-            # This part is the same as before
             song_name = self.track_info["name"]
             artist_name = self.track_info["artists"][0]["name"]
             track_id = self.track_info.get("id", song_name + artist_name)
@@ -169,8 +150,6 @@ class SongDownloader(QRunnable):
                 open(lrc_path, 'w').close()
                 self.signals.progress.emit("Lyrics fetch error", self.ui_index)
 
-            # --- MODIFICATION START ---
-            # Construct the final song dictionary here INSIDE the worker
             new_song_dict = {
                 "song_name": song_name,
                 "artist": artist_name,
@@ -181,9 +160,7 @@ class SongDownloader(QRunnable):
                 "artist_id": artist_id
             }
 
-            # Emit the complete dictionary and the UI index
             self.signals.finished.emit(new_song_dict, self.ui_index)
-            # --- MODIFICATION END ---
         except Exception as e:
             self.signals.error.emit(str(e), self.ui_index)
 
@@ -192,6 +169,8 @@ class SearchFrame(QWidget):
     def __init__(self, parent=None, back_callback=None):
         super().__init__(parent)
         self.main_frame = parent
+        self.sp = self.main_frame.sp
+        self.back_callback = back_callback
         self.back_callback = back_callback
         self.active_downloads = {}
         self.preview_buttons = {}
@@ -213,8 +192,6 @@ class SearchFrame(QWidget):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(20, 15, 20, 15)
         self.main_layout.setSpacing(15)
-        print(self.main_frame.width())
-        # --- Header ---
         header_layout = QHBoxLayout()
         header_layout.setSpacing(15)
 
@@ -242,7 +219,6 @@ class SearchFrame(QWidget):
 
         self.main_layout.addLayout(header_layout)
 
-        # --- Results Area ---
         self.results_scroll_area = QScrollArea()
         self.results_scroll_area.setWidgetResizable(True)
         self.results_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -308,9 +284,9 @@ class SearchFrame(QWidget):
             self.status_label.setText("Please enter a search term.")
             self.status_label.show()
             return
-        if not sp:
+        if not self.sp:
             self.clear_results()
-            self.status_label.setText("Spotify service not available.")
+            self.status_label.setText("Spotify client not available. Check your API keys in Settings.")
             self.status_label.show()
             return
 
@@ -319,7 +295,7 @@ class SearchFrame(QWidget):
         self.status_label.show()
 
         try:
-            data = sp.search(q=term, limit=20, type="track")
+            data = self.sp.search(q=term, limit=20, type="track")
             if data and data["tracks"]["items"]:
                 self.status_label.hide()
                 self.search_results = data["tracks"]["items"]
@@ -420,8 +396,7 @@ class SearchFrame(QWidget):
             card.deleteLater()
         self.result_cards.clear()
 
-        # Remove only the result cards, not the status label
-        for i in range(self.results_layout.count() - 1, 0, -1):  # Start from end, skip index 0 (status_label)
+        for i in range(self.results_layout.count() - 1, 0, -1):
             item = self.results_layout.takeAt(i)
             if widget := item.widget():
                 widget.deleteLater()
@@ -520,7 +495,7 @@ class SearchFrame(QWidget):
 
         os.makedirs(download_path, exist_ok=True)
 
-        worker = SongDownloader(track_data, ui_index, download_path) # Renamed
+        worker = SongDownloader(track_data, ui_index, download_path)
         worker.signals.finished.connect(self.on_download_complete)
         worker.signals.error.connect(self.on_download_error)
         worker.signals.progress.connect(self.on_download_progress)
@@ -550,7 +525,6 @@ class SearchFrame(QWidget):
             with open(data_json_path, "r+") as f:
                 data = json.load(f)
 
-                # Check if song already exists (double-check)
                 if any(s.get("id") == new_song_info["id"] for s in data["All Songs"]):
                     return
 

@@ -5,28 +5,7 @@ import math
 from PySide6.QtCore import Qt, QRunnable, QObject, Signal, QThreadPool, QRectF, QTimer, QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QPen
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGraphicsOpacityEffect
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
-from groq import Groq
-
 from frames.frame_functions.music_helper import search_for_jiosaavn_url, get_song_id, get_song
-
-try:
-    groq_client = Groq(api_key="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")
-except Exception as e:
-    print(f"Groq initialization error: {e}")
-    groq_client = None
-
-try:
-    sp = spotipy.Spotify(
-        auth_manager=SpotifyClientCredentials(
-            client_id="2658ededc64b43dab40216de5d6f2b71",
-            client_secret="ce0ccaf83df34d3ea629a4938a36511c",
-        )
-    )
-except Exception as e:
-    print(f"Spotipy initialization error: {e}")
-    sp = None
 
 
 class RecommendationCard(QWidget):
@@ -42,7 +21,6 @@ class RecommendationCard(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setCursor(Qt.PointingHandCursor)
 
-        # Add opacity effect for fade animations
         self.opacity_effect = QGraphicsOpacityEffect()
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(1.0)
@@ -53,7 +31,6 @@ class RecommendationCard(QWidget):
         layout = QVBoxLayout(self)
         layout.addStretch()
 
-        # Adjust layout based on size class
         if self.size_class == "small":
             layout.setContentsMargins(8, 8, 8, 8)
             name_font_size = 12
@@ -66,22 +43,20 @@ class RecommendationCard(QWidget):
             layout.setContentsMargins(14, 14, 14, 14)
             name_font_size = 15
             max_width = 150
-        else:  # medium
+        else:
             layout.setContentsMargins(12, 12, 12, 12)
             name_font_size = 14
             max_width = 120
 
-        # Song name with eliding
         song_name = self.track_data.get('name', 'Unknown Song') if self.track_data else 'Unknown Song'
         self.song_label = QLabel(song_name)
         self.song_label.setFixedWidth(max_width)
         self.song_label.setStyleSheet(f"""
-            color: #f0f0f0; 
+            color: #f0f0f0;
             font-size: {name_font_size}px; 
             font-weight: bold; 
             background: transparent;
         """)
-        # Enable text eliding with ellipsis
         self.song_label.setWordWrap(False)
         self.song_label.setText(self.song_label.fontMetrics().elidedText(
             song_name, Qt.ElideRight, max_width
@@ -132,26 +107,24 @@ class RecommendationCard(QWidget):
 
             painter.drawPixmap(-crop_x, -crop_y, scaled_pixmap)
         else:
-            # Placeholder gradient if no image
             placeholder_gradient = QLinearGradient(0, 0, 0, self.height())
             placeholder_gradient.setColorAt(0, QColor(65, 65, 75))
             placeholder_gradient.setColorAt(1, QColor(45, 45, 55))
             painter.fillRect(self.rect(), placeholder_gradient)
 
-        # 2. Draw dimming gradient overlay for text readability
         dim_gradient = QLinearGradient(0, self.height() * 0.3, 0, self.height())
         dim_gradient.setColorAt(0, Qt.transparent)
         dim_gradient.setColorAt(1, QColor(0, 0, 0, 220))
         painter.fillRect(self.rect(), dim_gradient)
 
-        # 3. Draw border on hover
+        
         if self.is_hovered:
             pen = QPen(QColor(255, 255, 255, 200))
             pen.setWidth(2)
             painter.setPen(pen)
             painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 12, 12)
 
-        # Allow base class to paint children (labels)
+        
         super().paintEvent(event)
 
     def enterEvent(self, event):
@@ -203,107 +176,107 @@ class HandcraftedLayoutManager:
             chosen_pattern = random.choice(pattern_variations)
             return self.apply_pattern(chosen_pattern, card_count)
 
-        # Fallback to simple grid
+        
         return self.create_simple_grid(card_count)
 
     def get_layout_patterns(self):
         """Define handcrafted layout patterns for different card counts - NO OVERLAPS"""
         return {
             2: [
-                # Horizontal split
+                
                 [(0, 0, 0.5, 1, "medium"), (0.5, 0, 0.5, 1, "medium")],
-                # Vertical split
+                
                 [(0, 0, 1, 0.5, "wide"), (0, 0.5, 1, 0.5, "wide")],
-                # Golden ratio split
+                
                 [(0, 0, 0.618, 1, "medium"), (0.618, 0, 0.382, 1, "medium")]
             ],
             3: [
-                # L-shape
+                
                 [(0, 0, 0.6, 0.6, "large"), (0.6, 0, 0.4, 0.6, "medium"), (0, 0.6, 1, 0.4, "wide")],
-                # Vertical thirds
+                
                 [(0, 0, 0.33, 1, "tall"), (0.33, 0, 0.34, 1, "tall"), (0.67, 0, 0.33, 1, "tall")],
-                # One big, two small stack
+                
                 [(0, 0, 0.7, 1, "large"), (0.7, 0, 0.3, 0.5, "small"), (0.7, 0.5, 0.3, 0.5, "small")]
             ],
             4: [
-                # Perfect squares
+                
                 [(0, 0, 0.5, 0.5, "medium"), (0.5, 0, 0.5, 0.5, "medium"),
                  (0, 0.5, 0.5, 0.5, "medium"), (0.5, 0.5, 0.5, 0.5, "medium")],
-                # One large, three small
+                
                 [(0, 0, 0.6, 0.6, "large"), (0.6, 0, 0.4, 0.3, "small"),
                  (0.6, 0.3, 0.4, 0.3, "small"), (0, 0.6, 1, 0.4, "wide")],
-                # T-shape
+                
                 [(0, 0, 1, 0.3, "wide"), (0, 0.3, 0.33, 0.7, "tall"),
                  (0.33, 0.3, 0.34, 0.7, "tall"), (0.67, 0.3, 0.33, 0.7, "tall")]
             ],
             5: [
-                # Cross pattern
+                
                 [(0.3, 0, 0.4, 0.3, "medium"), (0, 0.3, 0.3, 0.4, "medium"), (0.3, 0.3, 0.4, 0.4, "large"),
                  (0.7, 0.3, 0.3, 0.4, "medium"), (0.3, 0.7, 0.4, 0.3, "medium")],
-                # L-shape extended
+                
                 [(0, 0, 0.4, 0.6, "medium"), (0.4, 0, 0.3, 0.3, "small"), (0.7, 0, 0.3, 0.6, "medium"),
                  (0.4, 0.3, 0.3, 0.3, "small"), (0, 0.6, 0.7, 0.4, "wide")]
             ],
             6: [
-                # 2x3 clean grid
+                
                 [(0, 0, 0.33, 0.5, "medium"), (0.33, 0, 0.34, 0.5, "medium"), (0.67, 0, 0.33, 0.5, "medium"),
                  (0, 0.5, 0.33, 0.5, "medium"), (0.33, 0.5, 0.34, 0.5, "medium"), (0.67, 0.5, 0.33, 0.5, "medium")],
-                # Central focus
+                
                 [(0.2, 0.2, 0.6, 0.6, "large"), (0, 0, 0.2, 0.5, "small"), (0.8, 0, 0.2, 0.5, "small"),
                  (0, 0.5, 0.2, 0.5, "small"), (0.8, 0.5, 0.2, 0.5, "small"), (0.2, 0.8, 0.6, 0.2, "wide")]
             ],
             7: [
-                # Hexagon inspired
+                
                 [(0.25, 0.15, 0.5, 0.4, "large"), (0, 0, 0.25, 0.3, "small"), (0.75, 0, 0.25, 0.3, "small"),
                  (0, 0.3, 0.25, 0.4, "small"), (0.75, 0.3, 0.25, 0.4, "small"),
                  (0, 0.7, 0.5, 0.3, "medium"), (0.5, 0.7, 0.5, 0.3, "medium")]
             ],
             8: [
-                # Gallery wall clean
+                
                 [(0, 0, 0.4, 0.5, "medium"), (0.4, 0, 0.3, 0.25, "small"), (0.7, 0, 0.3, 0.5, "medium"),
                  (0.4, 0.25, 0.3, 0.25, "small"), (0, 0.5, 0.2, 0.5, "small"), (0.2, 0.5, 0.2, 0.5, "small"),
                  (0.4, 0.5, 0.3, 0.5, "medium"), (0.7, 0.5, 0.3, 0.5, "medium")],
-                # 4x2 with variations
+                
                 [(0, 0, 0.25, 0.5, "medium"), (0.25, 0, 0.25, 0.5, "medium"), (0.5, 0, 0.25, 0.5, "medium"),
                  (0.75, 0, 0.25, 0.5, "medium"),
                  (0, 0.5, 0.25, 0.5, "medium"), (0.25, 0.5, 0.25, 0.5, "medium"), (0.5, 0.5, 0.25, 0.5, "medium"),
                  (0.75, 0.5, 0.25, 0.5, "medium")]
             ],
             9: [
-                # 3x3 perfect grid
+                
                 [(0, 0, 0.33, 0.33, "medium"), (0.33, 0, 0.34, 0.33, "medium"), (0.67, 0, 0.33, 0.33, "medium"),
                  (0, 0.33, 0.33, 0.34, "medium"), (0.33, 0.33, 0.34, 0.34, "medium"),
                  (0.67, 0.33, 0.33, 0.34, "medium"),
                  (0, 0.67, 0.33, 0.33, "medium"), (0.33, 0.67, 0.34, 0.33, "medium"),
                  (0.67, 0.67, 0.33, 0.33, "medium")],
-                # Central star
+                
                 [(0.3, 0.3, 0.4, 0.4, "large"), (0, 0, 0.3, 0.3, "small"), (0.7, 0, 0.3, 0.3, "small"),
                  (0, 0.7, 0.3, 0.3, "small"), (0.7, 0.7, 0.3, 0.3, "small"), (0.3, 0, 0.4, 0.3, "medium"),
                  (0, 0.3, 0.3, 0.4, "medium"), (0.7, 0.3, 0.3, 0.4, "medium"), (0.3, 0.7, 0.4, 0.3, "medium")]
             ],
             10: [
-                # 5x2 clean rows
+                
                 [(0, 0, 0.2, 0.5, "medium"), (0.2, 0, 0.2, 0.5, "medium"), (0.4, 0, 0.2, 0.5, "medium"),
                  (0.6, 0, 0.2, 0.5, "medium"), (0.8, 0, 0.2, 0.5, "medium"),
                  (0, 0.5, 0.2, 0.5, "medium"), (0.2, 0.5, 0.2, 0.5, "medium"), (0.4, 0.5, 0.2, 0.5, "medium"),
                  (0.6, 0.5, 0.2, 0.5, "medium"), (0.8, 0.5, 0.2, 0.5, "medium")]
             ],
             11: [
-                # Mixed composition
+                
                 [(0, 0, 0.3, 0.4, "medium"), (0.3, 0, 0.4, 0.6, "large"), (0.7, 0, 0.3, 0.3, "small"),
                  (0, 0.4, 0.15, 0.3, "small"), (0.15, 0.4, 0.15, 0.3, "small"), (0.7, 0.3, 0.3, 0.3, "small"),
                  (0, 0.7, 0.14, 0.3, "small"), (0.14, 0.7, 0.14, 0.3, "small"), (0.28, 0.7, 0.14, 0.3, "small"),
                  (0.42, 0.7, 0.14, 0.3, "small"), (0.56, 0.7, 0.44, 0.3, "medium")]
             ],
             12: [
-                # 4x3 perfect grid
+                
                 [(0, 0, 0.25, 0.33, "medium"), (0.25, 0, 0.25, 0.33, "medium"), (0.5, 0, 0.25, 0.33, "medium"),
                  (0.75, 0, 0.25, 0.33, "medium"),
                  (0, 0.33, 0.25, 0.34, "medium"), (0.25, 0.33, 0.25, 0.34, "medium"), (0.5, 0.33, 0.25, 0.34, "medium"),
                  (0.75, 0.33, 0.25, 0.34, "medium"),
                  (0, 0.67, 0.25, 0.33, "medium"), (0.25, 0.67, 0.25, 0.33, "medium"), (0.5, 0.67, 0.25, 0.33, "medium"),
                  (0.75, 0.67, 0.25, 0.33, "medium")],
-                # Gallery masterpiece
+                
                 [(0.1, 0.05, 0.8, 0.3, "large"), (0, 0.35, 0.2, 0.3, "small"), (0.2, 0.35, 0.15, 0.3, "small"),
                  (0.35, 0.35, 0.15, 0.3, "small"), (0.5, 0.35, 0.15, 0.3, "small"), (0.65, 0.35, 0.15, 0.3, "small"),
                  (0.8, 0.35, 0.2, 0.3, "small"),
@@ -339,8 +312,8 @@ class HandcraftedLayoutManager:
         return layout
 
 
-# DynamicMasonryLayout class can be removed if not used, but it's fine to keep it.
-# For this fix, we are focusing on HandcraftedLayoutManager as it's the one being used.
+
+
 
 
 class ImageDownloadWorker(QRunnable):
@@ -373,15 +346,19 @@ class RecommendationWorker(QRunnable):
         error = Signal(str)
         progress = Signal(str)
 
-    def __init__(self, all_songs):
+    def __init__(self, all_songs, sp_client, groq_client):
         super().__init__()
         self.all_songs = all_songs
         self.signals = self.Signals()
+        
+        self.sp = sp_client
+        self.groq_client = groq_client
 
     def run(self):
         try:
-            if not groq_client or not sp:
-                self.signals.error.emit("AI services not available")
+            
+            if not self.groq_client or not self.sp:
+                self.signals.error.emit("AI or Spotify services not available. Check API keys in Settings.")
                 return
             if not self.all_songs:
                 self.signals.error.emit("No songs in library")
@@ -417,7 +394,7 @@ class RecommendationWorker(QRunnable):
     def get_groq_recommendations(self, user_data):
         """Get music recommendations from Groq AI with improved error handling and detailed prompting"""
         try:
-            # Validate input data
+            
             if not user_data or not isinstance(user_data, dict):
                 print("Invalid user_data provided")
                 return []
@@ -430,11 +407,11 @@ class RecommendationWorker(QRunnable):
                 print("No songs or artists found in user data")
                 return []
 
-            # Prepare data with fallbacks
-            songs_list = ", ".join([f'"{song}"' for song in songs[:50]])  # Limit to prevent token overflow
-            artists_list = ", ".join([f'"{artist}"' for artist in artists[:30]])  # Limit artists list
+            
+            songs_list = ", ".join([f'"{song}"' for song in songs[:50]])  
+            artists_list = ", ".join([f'"{artist}"' for artist in artists[:30]])  
 
-            # Enhanced prompt with detailed instructions
+            
             prompt = f"""You are a professional music recommendation AI. Based on the user's music library data below, recommend exactly 12 songs that match their taste.
 
        USER'S MUSIC LIBRARY ANALYSIS:
@@ -472,12 +449,12 @@ class RecommendationWorker(QRunnable):
 
        Generate recommendations now:"""
 
-            # Make API call with better parameters
-            completion = groq_client.chat.completions.create(
+            
+            completion = self.groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model="meta-llama/llama-4-maverick-17b-128e-instruct",
-                temperature=0.8,  # Slightly higher for more creativity
-                max_tokens=1024,  # Increased token limit
+                temperature=0.8,  
+                max_tokens=1024,  
                 response_format={"type": "json_object"},
                 stream=False,
             )
@@ -485,14 +462,14 @@ class RecommendationWorker(QRunnable):
             response_text = completion.choices[0].message.content.strip()
             print("Raw Groq Response:", response_text)
 
-            # Multiple fallback parsing attempts
+            
             recommendations_songs = []
 
             try:
-                # First attempt: Direct JSON parsing
+                
                 recommendations = json.loads(response_text)
 
-                # Handle different possible JSON structures
+                
                 if "songs" in recommendations:
                     recommendations_songs = recommendations["songs"]
                 elif isinstance(recommendations, list):
@@ -504,12 +481,12 @@ class RecommendationWorker(QRunnable):
             except json.JSONDecodeError as json_error:
                 print(f"JSON parsing failed: {json_error}")
 
-                # Fallback: Try to extract JSON from text
+                
                 try:
-                    # Remove potential markdown formatting
+                    
                     clean_text = response_text.replace("```json", "").replace("```", "").strip()
 
-                    # Try parsing cleaned text
+                    
                     recommendations = json.loads(clean_text)
 
                     if "songs" in recommendations:
@@ -521,12 +498,12 @@ class RecommendationWorker(QRunnable):
                     print("All JSON parsing attempts failed")
                     return []
 
-            # Validate recommendations structure
+            
             if not isinstance(recommendations_songs, list):
                 print("Recommendations is not a list:", type(recommendations_songs))
                 return []
 
-            # Validate and clean each recommendation
+            
             validated_songs = []
             for song in recommendations_songs:
                 if not isinstance(song, dict):
@@ -536,18 +513,18 @@ class RecommendationWorker(QRunnable):
                 song_name = song.get("song_name", "").strip()
                 artist_name = song.get("artist_name", "").strip()
 
-                # Validate required fields
+                
                 if not song_name or not artist_name:
                     print(f"Missing song_name or artist_name: {song}")
                     continue
 
-                # Check for duplicates in user's library (case-insensitive)
+                
                 user_songs_lower = [s.lower() for s in songs]
                 if song_name.lower() in user_songs_lower:
                     print(f"Song already in library: {song_name}")
                     continue
 
-                # Filter out unwanted versions
+                
                 unwanted_keywords = [
                     'remix', 'slowed', 'reverb', 'speed up', 'sped up',
                     'acoustic', 'live', 'cover', 'karaoke', 'instrumental',
@@ -581,11 +558,11 @@ class RecommendationWorker(QRunnable):
                 if not song_name or not artist_name:
                     continue
                 search_query = f'track:"{song_name}" artist:"{artist_name}"'
-                results = sp.search(q=search_query, type='track', limit=1, market='US')
+                results = self.sp.search(q=search_query, type='track', limit=1, market='US')
                 if results and results['tracks']['items']:
                     spotify_tracks.append(results['tracks']['items'][0])
                 else:
-                    results = sp.search(q=f"{song_name} {artist_name}", type='track', limit=1, market='US')
+                    results = self.sp.search(q=f"{song_name} {artist_name}", type='track', limit=1, market='US')
                     if results and results['tracks']['items']:
                         spotify_tracks.append(results['tracks']['items'][0])
             except Exception:
@@ -611,7 +588,7 @@ class RecommendationWorker(QRunnable):
 
 class PicksForYouWidget(QWidget):
     """Main widget for displaying AI-powered personalized music recommendations with handcrafted layouts"""
-    CYCLE_INTERVAL_MS = 12000  # 6 seconds
+    CYCLE_INTERVAL_MS = 12000  
 
     def __init__(self, main_frame):
         super().__init__(main_frame)
@@ -621,16 +598,16 @@ class PicksForYouWidget(QWidget):
         self.image_cache = {}
         self.all_recommendations = []
         self.current_displayed_tracks = []
-        self.animation_timer = QTimer(self)  # Set parent for auto-cleanup
+        self.animation_timer = QTimer(self)  
         self.animation_timer.timeout.connect(self.cycle_recommendations)
 
-        # ADD: Mouse hover tracking variables
+        
         self.is_mouse_over = False
         self.timer_was_active = False
 
         self.setup_ui()
 
-    # ADD: Mouse enter event handler
+    
     def enterEvent(self, event):
         """Handle mouse entering the widget - pause cycling"""
         self.is_mouse_over = True
@@ -639,7 +616,7 @@ class PicksForYouWidget(QWidget):
             self.animation_timer.stop()
         super().enterEvent(event)
 
-    # ADD: Mouse leave event handler
+    
     def leaveEvent(self, event):
         """Handle mouse leaving the widget - resume cycling"""
         self.is_mouse_over = False
@@ -661,7 +638,7 @@ class PicksForYouWidget(QWidget):
         self.refresh_btn.setToolTip("Refresh Recommendations")
         self.refresh_btn.setFixedSize(32, 32)
         self.refresh_btn.setStyleSheet("""
-            QPushButton { background: rgba(255, 255, 255, 0.1); border: none; border-radius: 16px; font-size: 16px; color: #e0e0e0; }
+            QPushButton { background: rgba(255, 255, 255, 0.1); border: none; border-radius: 16px; font-size: 16px; color: 
             QPushButton:hover { background-color: rgba(255, 255, 255, 0.2); }""")
         self.refresh_btn.clicked.connect(self.refresh_recommendations)
         header_layout.addWidget(self.refresh_btn)
@@ -679,7 +656,18 @@ class PicksForYouWidget(QWidget):
             self.status_label.show()
             self.status_label.setGeometry(self.grid_container.rect())
             return
-        worker = RecommendationWorker(self.main_frame.all_songs)
+
+        if not self.main_frame.sp or not self.main_frame.groq_client:
+            self.status_label.setText("Please configure your Spotify and Groq API keys in Settings.")
+            self.status_label.show()
+            self.status_label.setGeometry(self.grid_container.rect())
+            return
+
+        worker = RecommendationWorker(
+            self.main_frame.all_songs,
+            self.main_frame.sp,
+            self.main_frame.groq_client
+        )
         worker.signals.finished.connect(self.on_all_recommendations_loaded)
         worker.signals.error.connect(self.handle_error)
         worker.signals.progress.connect(self.update_status)
@@ -691,7 +679,6 @@ class PicksForYouWidget(QWidget):
             return
         self.all_recommendations = recommendations
 
-        # --- FIX: Don't start the timer here. Let create_dynamic_grid handle it. ---
         self.create_dynamic_grid()
 
     def get_container_category(self):
@@ -712,28 +699,23 @@ class PicksForYouWidget(QWidget):
             return random.randint(8, 12)
 
     def select_tracks_to_display(self, count):
-        # Ensure we don't try to sample more items than exist in the list
         count = min(count, len(self.all_recommendations))
 
-        # Avoid showing the exact same set of tracks if possible
         available_tracks = [t for t in self.all_recommendations if t not in self.current_displayed_tracks]
         if len(available_tracks) >= count:
             return random.sample(available_tracks, count)
         else:
-            # If not enough new tracks, just sample from the whole list
             return random.sample(self.all_recommendations, count)
 
     def create_dynamic_grid(self):
         """Create handcrafted layout grid and manage the animation timer."""
-        # --- FIX: Always stop the timer before creating a new grid to prevent conflicts ---
         self.animation_timer.stop()
-        self.timer_was_active = False  # Reset tracking
+        self.timer_was_active = False
 
         if not self.all_recommendations:
             return
 
-        # This also clears old card widgets from the container
-        self.clear_grid(stop_timer=False)  # We already stopped it
+        self.clear_grid(stop_timer=False)
 
         available_width = self.grid_container.width()
         available_height = self.grid_container.height()
@@ -763,13 +745,11 @@ class PicksForYouWidget(QWidget):
 
         self.status_label.hide()
 
-        # MODIFY: Only start timer if mouse is not over the widget and there are more songs to cycle
         if (len(self.all_recommendations) > len(self.current_displayed_tracks) and
                 not self.is_mouse_over):
             self.animation_timer.start(self.CYCLE_INTERVAL_MS)
             self.timer_was_active = False
         elif len(self.all_recommendations) > len(self.current_displayed_tracks):
-            # If mouse is over, remember that timer should be active when mouse leaves
             self.timer_was_active = True
 
     def cycle_recommendations(self):
@@ -780,7 +760,6 @@ class PicksForYouWidget(QWidget):
         cards_to_remove = self.recommendation_cards[:]
         self.recommendation_cards.clear()
 
-        # Use a counter to ensure we only create the new grid once all old cards are gone.
         self.fade_out_counter = len(cards_to_remove)
 
         def on_fade_out_complete():
@@ -788,7 +767,6 @@ class PicksForYouWidget(QWidget):
             if self.fade_out_counter <= 0:
                 for card in cards_to_remove:
                     card.deleteLater()
-                # The timer will be restarted by create_dynamic_grid
                 QTimer.singleShot(100, self.create_dynamic_grid)
 
         if not cards_to_remove:
@@ -796,7 +774,6 @@ class PicksForYouWidget(QWidget):
             return
 
         for card in cards_to_remove:
-            # The callback will trigger the creation of the next grid
             card.fade_out(duration=400, callback=on_fade_out_complete)
 
     def resizeEvent(self, event):
@@ -804,16 +781,13 @@ class PicksForYouWidget(QWidget):
         super().resizeEvent(event)
         self.status_label.setGeometry(self.grid_container.rect())
 
-        # --- FIX: Simplified resize logic. Just stop and recreate. ---
-        # The create_dynamic_grid method will handle restarting the timer.
         if self.all_recommendations and not self.status_label.isVisible():
             self.animation_timer.stop()
-            # Use a single shot to avoid rapid-fire recreations while resizing
             if not hasattr(self, '_resize_timer'):
                 self._resize_timer = QTimer(self)
                 self._resize_timer.setSingleShot(True)
                 self._resize_timer.timeout.connect(self.create_dynamic_grid)
-            self._resize_timer.start(250)  # Debounce resizing
+            self._resize_timer.start(250)
 
     def download_album_cover(self, track, card):
         """Download album cover for a card."""
@@ -850,7 +824,7 @@ class PicksForYouWidget(QWidget):
     def refresh_recommendations(self):
         """Refresh recommendations with new grid."""
         self.update_status("Getting fresh recommendations...")
-        self.clear_grid()  # This also stops the timer
+        self.clear_grid()
         self.all_recommendations = []
         self.current_displayed_tracks = []
         QTimer.singleShot(100, self.load_recommendations)

@@ -10,7 +10,6 @@ from colorthief import ColorThief
 
 
 class CustomTimerDialog(QDialog):
-    # This class remains unchanged
     timerStarted = Signal(QTime)
     timerStopped = Signal()
 
@@ -194,7 +193,6 @@ class CustomTimerDialog(QDialog):
 
 
 class QueueListWidget(QListWidget):
-    # This class remains unchanged
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setDragDropMode(QListWidget.InternalMove)
@@ -209,7 +207,6 @@ class QueueListWidget(QListWidget):
 
 
 class QueueView(QWidget):
-    # This class remains unchanged
     queueUpdated = Signal(list)
 
     def __init__(self, parent=None):
@@ -385,20 +382,15 @@ class NowPlayingView(QWidget):
     def setup_ui(self):
         self.setAttribute(Qt.WA_StyledBackground, True)
 
-        # --- MODIFICATION START ---
-        # The main layout now directly holds the player content.
-        # The top bar will be a separate, floating widget.
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(40, 10, 40, 30)
         main_layout.setSpacing(0)
 
-        # Create the floating top bar widget
         self.top_bar_widget = QWidget(self)
         self.top_bar_widget.setStyleSheet("background:transparent;")
 
-        # This layout is for the content INSIDE the floating widget
         self.top_bar_layout = QHBoxLayout(self.top_bar_widget)
-        self.top_bar_layout.setContentsMargins(0, 25, 20, 0)  # Adjusted margins
+        self.top_bar_layout.setContentsMargins(0, 25, 20, 0)
         self.top_bar_layout.addStretch()
         self.menu_button = create_button("icons/bar.png", self.main_frame.toggle_home_screen, 40)
         self.menu_button.setToolTip("Toggle Panel")
@@ -407,7 +399,6 @@ class NowPlayingView(QWidget):
             "QPushButton { background: rgba(0,0,0,0.4); border-radius: 30px; } QPushButton:hover { background: rgba(0,0,0,0.6); }")
         self.top_bar_layout.addWidget(self.menu_button)
 
-        # The rest of the player UI is added to the main_layout, filling the whole space.
         main_layout.addStretch(1)
 
         cover_layout = QHBoxLayout()
@@ -523,8 +514,6 @@ class NowPlayingView(QWidget):
         self.queue_view.resizeEvent(event)
 
     def update_menu_button_icon(self, is_expanded):
-        # This method now just updates the margins of the layout
-        # INSIDE the floating top_bar_widget. The tooltip is also updated.
         if is_expanded:
             self.top_bar_layout.setContentsMargins(0, 25, 20, 0)
             self.menu_button.setToolTip("Hide Panel")

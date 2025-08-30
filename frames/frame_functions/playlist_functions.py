@@ -6,7 +6,6 @@ from PySide6.QtGui import QPixmap, QIcon, QPixmapCache, QFont, QColor
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QPushButton, QFileDialog, QWidget, QScrollArea, QMessageBox,
                                QAbstractItemView, QCheckBox, QProgressBar, QListWidgetItem)
-from spotipy.oauth2 import SpotifyClientCredentials
 from frames.search_frame import ImageDownloader
 from .utils import create_button, apply_hover_effect
 
@@ -243,7 +242,7 @@ class DownloadProgressDialog(QDialog):
 
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.accept)
-        self.close_button.setEnabled(False)  # Disabled until finished
+        self.close_button.setEnabled(False)
         layout.addWidget(self.close_button)
 
     def apply_styles(self):
@@ -293,7 +292,7 @@ class DownloadProgressDialog(QDialog):
                 if status == "In Library":
                     item.setToolTip("Already in your library")
             elif status == "Failed":
-                self.completed_songs += 1 # A failed attempt is still a "processed" song
+                self.completed_songs += 1
                 self.progress_bar.setValue(self.completed_songs)
                 self.status_label.setText(f"Processed {self.completed_songs} of {self.total_songs} songs...")
                 item.setIcon(QIcon("icons/download-failed.png"))
@@ -308,37 +307,23 @@ class DownloadProgressDialog(QDialog):
         self.close_button.setEnabled(True)
         self.close_button.setText("Done")
 
+
 class ImportPlaylistsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Import Spotify Playlist")
         self.setMinimumSize(480, 700)
         self.track_widgets = []
-        self.setup_spotify()
+        self.sp = self.parent().sp
         self.setup_ui()
         self.apply_styles()
         self.threadpool = QThreadPool()
-
-    def setup_spotify(self):
-        try:
-            self.sp = spotipy.Spotify(
-                auth_manager=SpotifyClientCredentials(
-                    client_id="baf2d72ae6054acf91dca4f10f8e3f2e",
-                    client_secret="aa9bbc0e087445a0a8799e676cd3ca5d",
-                )
-            )
-            self.sp.search('test', limit=1, type='track')
-        except Exception as e:
-            QMessageBox.critical(self, "Spotify Error",
-                                 f"Could not connect to Spotify. Please check your internet connection.\nError: {e}")
-            self.sp = None
 
     def setup_ui(self):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(20, 20, 20, 20)
         self.main_layout.setSpacing(20)
 
-        # --- Search Bar ---
         search_box_layout = QHBoxLayout()
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Paste Spotify Playlist URL here...")
@@ -373,7 +358,6 @@ class ImportPlaylistsDialog(QDialog):
         self.playlist_info_widget.setVisible(False)
         self.main_layout.addWidget(self.playlist_info_widget)
 
-        # --- Track List ---
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -385,7 +369,6 @@ class ImportPlaylistsDialog(QDialog):
         self.scroll_area.setWidget(self.results_container)
         self.main_layout.addWidget(self.scroll_area)
 
-        # --- Action Buttons ---
         buttons_layout = QHBoxLayout()
         self.select_all_button = QPushButton("Deselect All")
         self.select_all_button.clicked.connect(self.toggle_select_all)
@@ -463,6 +446,8 @@ class ImportPlaylistsDialog(QDialog):
 
     def search_playlist(self):
         if not self.sp:
+            QMessageBox.critical(self, "Spotify Error",
+                                 "Spotify client not available. Please configure your API keys in Settings.")
             return
 
         for widget in self.track_widgets:
@@ -477,6 +462,7 @@ class ImportPlaylistsDialog(QDialog):
 
         try:
             playlist_id = playlist_link.split('/')[-1].split('?')[0]
+
             playlist_data = self.sp.playlist(playlist_id)
             self.update_playlist_info_widget(playlist_data)
 
